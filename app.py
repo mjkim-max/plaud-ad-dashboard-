@@ -228,6 +228,7 @@ if run_report:
                         f"{row.get('campaign','')} / {row.get('creative_id','')} / "
                         f"{row.get('action','')} / {row.get('note','')}"
                     )
+st.markdown("<div class='sec-divider'></div>", unsafe_allow_html=True)
 
 # 진단 기간: 오늘 포함 최근 15일 (오늘 + 전일기준 14일 모두 포함)
 _today_ts = pd.Timestamp(datetime.now().date())
@@ -301,9 +302,9 @@ if not diag_res.empty:
                 return f"""<div style="line-height:1.4;"><strong>{label}</strong><br>CPA <strong>{cpa:,.0f}원</strong><br>비용 {cost:,.0f}원<br>전환 {conv:,.0f}</div>"""
 
             with c_today: st.markdown(fmt_head("오늘", *item['stats_today']), unsafe_allow_html=True)
-            with c_3d: st.markdown(fmt_head("3일(전일기준)", *item['stats_3']), unsafe_allow_html=True)
-            with c_7d: st.markdown(fmt_head("7일(전일기준)", *item['stats_7']), unsafe_allow_html=True)
-            with c_14d: st.markdown(fmt_head("14일(전일기준)", *item['stats_14']), unsafe_allow_html=True)
+            with c_3d: st.markdown(fmt_head("3일", *item['stats_3']), unsafe_allow_html=True)
+            with c_7d: st.markdown(fmt_head("7일", *item['stats_7']), unsafe_allow_html=True)
+            with c_14d: st.markdown(fmt_head("14일", *item['stats_14']), unsafe_allow_html=True)
 
             st.markdown("<div class='sec-divider'></div>", unsafe_allow_html=True)
             st.markdown("##### 소재별 진단")
@@ -416,11 +417,21 @@ if not diag_res.empty:
                         "구분",
                         ["증액", "보류", "종료", "유지"],
                         index=["증액", "보류", "종료", "유지"].index(existing_action)
-                        if existing_action in ["증액", "보류", "종료", "유지"] else 0
+                        if existing_action in ["증액", "보류", "종료", "유지"] else 3
                     )
-                    note = st.text_area("상세 내용", value=existing_note, height=90)
-                    submitted = st.form_submit_button("저장")
+                    note = st.text_area("상세 내용", value=existing_note, height=140)
+                    btn_cols = st.columns([1, 1, 6])
+                    with btn_cols[0]:
+                        submitted = st.form_submit_button("저장")
+                    with btn_cols[1]:
+                        do_delete = st.form_submit_button("삭제")
 
+                    if do_delete:
+                        if selected_date:
+                            delete_action(action_date=selected_date, creative_id=cid)
+                            st.rerun()
+                        else:
+                            st.info("날짜를 먼저 선택하세요.")
                     if submitted:
                         if not selected_date:
                             st.info("날짜를 먼저 선택하세요.")
