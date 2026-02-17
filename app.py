@@ -280,7 +280,7 @@ if not diag_res.empty:
                 unsafe_allow_html=True,
             )
 
-            col0, col1, col2, col3, col4 = st.columns([1, 1, 1, 1, 1.2])
+            col0, col1, col2, col3 = st.columns([1, 1, 1, 1])
 
             def format_stat_block(label, cpa, cost, conv, text_color):
                 cpa_val = "∞" if cpa == np.inf or (isinstance(cpa, float) and np.isinf(cpa)) else f"{cpa:,.0f}"
@@ -299,20 +299,7 @@ if not diag_res.empty:
             with col2: st.markdown(format_stat_block("7일", r['CPA_7'], r['Cost_7'], r['Conversions_7'], t_color), unsafe_allow_html=True)
             with col3: st.markdown(format_stat_block("14일", r['CPA_14'], r['Cost_14'], r['Conversions_14'], t_color), unsafe_allow_html=True)
 
-            with col4:
-                t_col = "red" if r['Status_Color'] == "Red" else "blue" if r['Status_Color'] == "Blue" else "orange"
-                title_style = f"color:{inactive_color};" if is_inactive else ""
-                detail_style = f"color:{inactive_color};" if is_inactive else ""
-                st.markdown(f"<div style='{title_style}'><strong>{r['Diag_Title']}</strong></div>", unsafe_allow_html=True)
-                st.markdown(f"<div style='{detail_style} font-size: 0.85rem;'>{r['Diag_Detail']}</div>", unsafe_allow_html=True)
-
-                unique_key = f"btn_{item['name']}_{r['Creative_ID']}_{idx}"
-                if st.button("분석하기", key=unique_key):
-                    st.session_state['chart_target_creative'] = r['Creative_ID']
-                    st.session_state['chart_target_adgroup'] = r['AdGroup']
-                    st.rerun()
-
-            # 소재별 타임라인 (최근 14일, 표형식)
+            # 소재별 타임라인/입력/진단 (최근 14일)
             today = datetime.now().date()
             start = today - timedelta(days=13)
             dates = [start + timedelta(days=i) for i in range(14)]
@@ -330,8 +317,8 @@ if not diag_res.empty:
             for _, ar in ad_actions.iterrows():
                 action_by_date[str(ar["action_date"])] = str(ar["action"])
 
-            # 타임라인 + 입력 폼 (좌: 캘린더, 우: 입력)
-            tl_left, tl_right = st.columns([3, 3])
+            # 3컬럼: 좌(날짜), 중(입력), 우(진단)
+            tl_left, tl_mid, tl_right = st.columns([1, 1, 1])
             with tl_left:
                 st.markdown("<div class='tl-wrap'>", unsafe_allow_html=True)
                 weekday_cols = st.columns(7)
@@ -368,7 +355,7 @@ if not diag_res.empty:
                             st.markdown("</div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
 
-            with tl_right:
+            with tl_mid:
                 if selected_date:
                     st.caption(f"선택된 날짜: {selected_date}")
                 else:
@@ -405,6 +392,17 @@ if not diag_res.empty:
                                 author="",
                             )
                             st.rerun()
+
+            with tl_right:
+                title_style = f"color:{inactive_color};" if is_inactive else ""
+                detail_style = f"color:{inactive_color};" if is_inactive else ""
+                st.markdown(f"<div style='{title_style}'><strong>{r['Diag_Title']}</strong></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='{detail_style} font-size: 0.85rem;'>{r['Diag_Detail']}</div>", unsafe_allow_html=True)
+                unique_key = f"btn_{item['name']}_{r['Creative_ID']}_{idx}"
+                if st.button("분석하기", key=unique_key):
+                    st.session_state['chart_target_creative'] = r['Creative_ID']
+                    st.session_state['chart_target_adgroup'] = r['AdGroup']
+                    st.rerun()
 
             st.markdown("<hr style='margin: 5px 0; border: none; border-top: 1px solid #f0f2f6;'>", unsafe_allow_html=True)
 else:
