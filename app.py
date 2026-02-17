@@ -270,10 +270,10 @@ if not diag_res.empty:
                 unsafe_allow_html=True,
             )
 
-            # 소재별 타임라인 (최근 30일, 표형식)
+            # 소재별 타임라인 (최근 14일, 표형식)
             today = datetime.now().date()
-            start = today - timedelta(days=29)
-            dates = [start + timedelta(days=i) for i in range(30)]
+            start = today - timedelta(days=13)
+            dates = [start + timedelta(days=i) for i in range(14)]
             cid = str(r["Creative_ID"])
             selected_date = st.session_state["action_selected"].get(cid, "")
 
@@ -286,21 +286,17 @@ if not diag_res.empty:
             for _, ar in ad_actions.iterrows():
                 action_by_date[str(ar["action_date"])] = str(ar["action"])
 
-            title_cols = st.columns([6, 1])
-            with title_cols[1]:
-                btn_label = "입력"
-                if selected_date and selected_date in action_by_date:
-                    btn_label = "수정"
-                if st.button(btn_label, key=f"act_edit_{cid}"):
-                    if not selected_date:
-                        selected_date = today.isoformat()
-                        st.session_state["action_selected"][cid] = selected_date
-                    st.session_state["action_mode"] = "edit"
+            st.caption("최근 14일 조치 타임라인")
+            # 요일 헤더
+            weekday_cols = st.columns(7)
+            weekday_labels = ["일", "월", "화", "수", "목", "금", "토"]
+            for col, lbl in zip(weekday_cols, weekday_labels):
+                col.markdown(f"<div class='tl-note'><strong>{lbl}</strong></div>", unsafe_allow_html=True)
 
-            st.caption("최근 30일 조치 타임라인")
-            for row_start in range(0, 30, 10):
-                row_dates = dates[row_start:row_start + 10]
-                cols = st.columns(10)
+            # 2주(7x2) 그리드
+            for row_start in range(0, 14, 7):
+                row_dates = dates[row_start:row_start + 7]
+                cols = st.columns(7)
                 for col, d in zip(cols, row_dates):
                     d_str = d.isoformat()
                     act = action_by_date.get(d_str, "")
@@ -311,47 +307,38 @@ if not diag_res.empty:
                         icon = "🟨"
                     elif act == "종료":
                         icon = "🟥"
-                    label = f"{icon}{d.strftime('%d')}"
+                    label = f"{icon}{d.strftime('%m/%d')}"
                     if col.button(label, key=f"tl_{cid}_{d_str}"):
                         st.session_state["action_selected"][cid] = d_str
 
+            # 선택 날짜 입력/수정 폼
             if selected_date:
-                has_action = selected_date in action_by_date
-                c1, c2 = st.columns([1, 8])
-                with c1:
-                    if has_action and st.button("삭제", key=f"act_del_{cid}_{selected_date}"):
-                        delete_action(action_date=selected_date, creative_id=cid)
-                        st.session_state["action_mode"] = ""
-                        st.rerun()
+                existing = ad_actions[ad_actions["action_date"] == selected_date]
+                existing_action = existing["action"].iloc[0] if not existing.empty else ""
+                existing_note = existing["note"].iloc[0] if not existing.empty else ""
 
-                if st.session_state.get("action_mode") == "edit":
-                    existing = ad_actions[ad_actions["action_date"] == selected_date]
-                    existing_action = existing["action"].iloc[0] if not existing.empty else ""
-                    existing_note = existing["note"].iloc[0] if not existing.empty else ""
-                    existing_author = existing["author"].iloc[0] if not existing.empty else ""
-
-                    with st.form(key=f"act_form_{cid}_{selected_date}"):
-                        action = st.selectbox(
-                            "조치",
-                            ["증액", "보류", "종료", "유지"],
-                            index=["증액", "보류", "종료", "유지"].index(existing_action)
-                            if existing_action in ["증액", "보류", "종료", "유지"] else 0
+                with st.form(key=f"act_form_{cid}_{selected_date}"):
+                    action = st.selectbox(
+                        "구분",
+                        ["증액", "보류", "종료", "유지"],
+                        index=["증액", "보류", "종료", "유지"].index(existing_action)
+                        if existing_action in ["증액", "보류", "종료", "유지"] else 0
+                    )
+                    note = st.text_area("상세 내용", value=existing_note, height=80)
+                    submitted = st.form_submit_button("저장")
+                    if submitted:
+                        upsert_action(
+                            action_date=selected_date,
+                            creative_id=cid,
+                            campaign=str(r.get("Campaign", "")),
+                            adgroup=str(r.get("AdGroup", "")),
+                            action=action,
+                            note=note,
+                            author="",
                         )
-                        note = st.text_input("메모", value=existing_note)
-                        author = st.text_input("담당자", value=existing_author)
-                        submitted = st.form_submit_button("저장")
-                        if submitted:
-                            upsert_action(
-                                action_date=selected_date,
-                                creative_id=cid,
-                                campaign=str(r.get("Campaign", "")),
-                                adgroup=str(r.get("AdGroup", "")),
-                                action=action,
-                                note=note,
-                                author=author,
-                            )
-                            st.session_state["action_mode"] = ""
-                            st.rerun()
+                        st.rerun()
+            else:
+                st.caption("날짜를 선택하면 조치 입력/수정이 가능합니다.")
                 col0, col1, col2, col3, col4 = st.columns([1, 1, 1, 1, 1.2])
 
                 def format_stat_block(label, cpa, cost, conv, text_color):
