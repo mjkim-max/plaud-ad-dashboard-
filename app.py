@@ -7,6 +7,7 @@ try:
 except Exception:
     go = None
 import streamlit as st
+from urllib.parse import quote as url_quote
 
 from services.data_loader import (
     load_main_data,
@@ -15,6 +16,7 @@ from services.data_loader import (
     get_meta_token_info,
 )
 from services.diagnosis import run_diagnosis
+from services.action_store import load_actions, upsert_action, delete_action
 
 # -----------------------------------------------------------------------------
 # [SETUP] 페이지 설정
@@ -31,6 +33,13 @@ st.markdown("""
     div[data-testid="stExpanderDetails"] {padding-top: 0.5rem; padding-bottom: 0.5rem;}
     p {margin-bottom: 0px !important;} 
     hr {margin: 0.5rem 0 !important;}
+    .tl-row {display: flex; gap: 6px; overflow-x: auto; padding: 6px 0 2px 0;}
+    .tl-box {min-width: 34px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 6px; border: 1px solid #e0e0e0; font-size: 12px; text-decoration: none; color: #222;}
+    .tl-inc {background: #e3f2fd; border-color: #90caf9; color: #0d47a1;}
+    .tl-hold {background: #fff8e1; border-color: #ffe082; color: #8d6e63;}
+    .tl-stop {background: #ffebee; border-color: #ef9a9a; color: #b71c1c;}
+    .tl-none {background: #ffffff;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -39,6 +48,23 @@ if 'chart_target_creative' not in st.session_state:
     st.session_state['chart_target_creative'] = None
 if 'chart_target_adgroup' not in st.session_state:
     st.session_state['chart_target_adgroup'] = None
+if "action_mode" not in st.session_state:
+    st.session_state["action_mode"] = ""
+
+
+def _get_qp_value(key: str) -> str:
+    try:
+        return str(st.query_params.get(key, ""))
+    except Exception:
+        return str(st.experimental_get_query_params().get(key, [""])[0])
+
+
+def _set_qp_values(**kwargs) -> None:
+    try:
+        for k, v in kwargs.items():
+            st.query_params[k] = v
+    except Exception:
+        st.experimental_set_query_params(**kwargs)
 
 # -----------------------------------------------------------------------------
 # 3. 사이드바 & 데이터 준비
@@ -180,6 +206,30 @@ else:
 diag_res = run_diagnosis(diag_base, target_cpa_warning)
 
 if not diag_res.empty:
+    actions_df = load_actions()
+    # 진단 결과에 최신 Status 병합
+    if "Status" in df_raw.columns:
+        status_src = df_raw.copy()
+        if "Date" in status_src.columns:
+            status_src = status_src.sort_values("Date")
+        status_latest = status_src.dropna(subset=["Status"]).groupby(
+            ["Campaign", "AdGroup", "Creative_ID"], as_index=False
+        ).tail(1)
+        diag_res = diag_res.merge(
+            status_latest[["Campaign", "AdGroup", "Creative_ID", "Status"]],
+            on=["Campaign", "AdGroup", "Creative_ID"],
+            how="left",
+        )
+
+    def _is_active_status(v: str) -> bool:
+        return str(v).upper() in {"ACTIVE", "ON", "ENABLED"}
+
+    if "Status" in diag_res.columns:
+        if status_opt == "게재중 (On)":
+            diag_res = diag_res[diag_res["Status"].apply(_is_active_status)]
+        elif status_opt == "비게재 (Off)":
+            diag_res = diag_res[~diag_res["Status"].apply(_is_active_status)]
+
     camp_grps = diag_res.groupby('Campaign')
     sorted_camps = []
 
@@ -227,25 +277,115 @@ if not diag_res.empty:
             st.markdown("##### 소재별 진단")
 
             for idx, (_, r) in enumerate(item['data'].iterrows()):
-                st.markdown(f"#### {r['Creative_ID']}")
+                is_inactive = False
+                if "Status" in r:
+                    is_inactive = not _is_active_status(r.get("Status"))
+                inactive_color = "#9aa0a6"
+                title_color = inactive_color if is_inactive else "inherit"
+            st.markdown(
+                f"<div style='color:{title_color}; font-size: 1.1rem; font-weight: 600;'>"
+                f"{r['Creative_ID']}</div>",
+                unsafe_allow_html=True,
+            )
+
+            # 소재별 타임라인 (최근 30일)
+            today = datetime.now().date()
+            start = today - timedelta(days=29)
+            dates = [start + timedelta(days=i) for i in range(30)]
+            cid = str(r["Creative_ID"])
+            selected_cid = _get_qp_value("action_creative")
+            selected_date = _get_qp_value("action_date")
+
+            if not actions_df.empty:
+                ad_actions = actions_df[actions_df["creative_id"] == cid]
+            else:
+                ad_actions = pd.DataFrame(columns=actions_df.columns)
+
+            action_by_date = {}
+            for _, ar in ad_actions.iterrows():
+                action_by_date[str(ar["action_date"])] = str(ar["action"])
+
+            boxes = []
+            for d in dates:
+                d_str = d.isoformat()
+                act = action_by_date.get(d_str, "")
+                cls = "tl-none"
+                if act == "증액":
+                    cls = "tl-inc"
+                elif act == "보류":
+                    cls = "tl-hold"
+                elif act == "종료":
+                    cls = "tl-stop"
+                href = f"?action_creative={url_quote(cid)}&action_date={d_str}"
+                boxes.append(f"<a class='tl-box {cls}' href='{href}'>{d.strftime('%d')}</a>")
+            st.markdown(f"<div class='tl-row'>{''.join(boxes)}</div>", unsafe_allow_html=True)
+
+            if selected_cid == cid and selected_date:
+                has_action = selected_date in action_by_date
+                c1, c2, c3 = st.columns([1, 1, 6])
+                with c1:
+                    if st.button("입력하기" if not has_action else "수정하기", key=f"act_edit_{cid}_{selected_date}"):
+                        st.session_state["action_mode"] = "edit"
+                with c2:
+                    if has_action and st.button("삭제", key=f"act_del_{cid}_{selected_date}"):
+                        delete_action(action_date=selected_date, creative_id=cid)
+                        _set_qp_values(action_creative=cid, action_date=selected_date)
+                        st.session_state["action_mode"] = ""
+                        st.rerun()
+
+                if st.session_state.get("action_mode") == "edit":
+                    existing = ad_actions[ad_actions["action_date"] == selected_date]
+                    existing_action = existing["action"].iloc[0] if not existing.empty else ""
+                    existing_note = existing["note"].iloc[0] if not existing.empty else ""
+                    existing_author = existing["author"].iloc[0] if not existing.empty else ""
+
+                    with st.form(key=f"act_form_{cid}_{selected_date}"):
+                        action = st.selectbox(
+                            "조치",
+                            ["증액", "보류", "종료", "유지"],
+                            index=["증액", "보류", "종료", "유지"].index(existing_action)
+                            if existing_action in ["증액", "보류", "종료", "유지"] else 0
+                        )
+                        note = st.text_input("메모", value=existing_note)
+                        author = st.text_input("담당자", value=existing_author)
+                        submitted = st.form_submit_button("저장")
+                        if submitted:
+                            upsert_action(
+                                action_date=selected_date,
+                                creative_id=cid,
+                                campaign=str(r.get("Campaign", "")),
+                                adgroup=str(r.get("AdGroup", "")),
+                                action=action,
+                                note=note,
+                                author=author,
+                            )
+                            st.session_state["action_mode"] = ""
+                            st.rerun()
                 col0, col1, col2, col3, col4 = st.columns([1, 1, 1, 1, 1.2])
 
-                def format_stat_block(label, cpa, cost, conv):
+                def format_stat_block(label, cpa, cost, conv, text_color):
                     cpa_val = "∞" if cpa == np.inf or (isinstance(cpa, float) and np.isinf(cpa)) else f"{cpa:,.0f}"
-                    return f"""<div style="line-height:1.6;"><strong>{label}</strong><br>CPA <strong>{cpa_val}원</strong><br>비용 {cost:,.0f}원<br>전환 {conv:,.0f}</div>"""
+                    return (
+                        f"<div style=\"line-height:1.6; color:{text_color};\">"
+                        f"<strong>{label}</strong><br>CPA <strong>{cpa_val}원</strong><br>"
+                        f"비용 {cost:,.0f}원<br>전환 {conv:,.0f}</div>"
+                    )
 
                 cpa_t = r.get("CPA_today", 0) or 0
                 cost_t = r.get("Cost_today", 0) or 0
                 conv_t = r.get("Conversions_today", 0) or 0
-                with col0: st.markdown(format_stat_block("오늘", cpa_t, cost_t, conv_t), unsafe_allow_html=True)
-                with col1: st.markdown(format_stat_block("3일", r['CPA_3'], r['Cost_3'], r['Conversions_3']), unsafe_allow_html=True)
-                with col2: st.markdown(format_stat_block("7일", r['CPA_7'], r['Cost_7'], r['Conversions_7']), unsafe_allow_html=True)
-                with col3: st.markdown(format_stat_block("14일", r['CPA_14'], r['Cost_14'], r['Conversions_14']), unsafe_allow_html=True)
+                t_color = inactive_color if is_inactive else "inherit"
+                with col0: st.markdown(format_stat_block("오늘", cpa_t, cost_t, conv_t, t_color), unsafe_allow_html=True)
+                with col1: st.markdown(format_stat_block("3일", r['CPA_3'], r['Cost_3'], r['Conversions_3'], t_color), unsafe_allow_html=True)
+                with col2: st.markdown(format_stat_block("7일", r['CPA_7'], r['Cost_7'], r['Conversions_7'], t_color), unsafe_allow_html=True)
+                with col3: st.markdown(format_stat_block("14일", r['CPA_14'], r['Cost_14'], r['Conversions_14'], t_color), unsafe_allow_html=True)
 
                 with col4:
                     t_col = "red" if r['Status_Color'] == "Red" else "blue" if r['Status_Color'] == "Blue" else "orange"
-                    st.markdown(f":{t_col}[**{r['Diag_Title']}**]")
-                    st.caption(r['Diag_Detail'])
+                    title_style = f"color:{inactive_color};" if is_inactive else ""
+                    detail_style = f"color:{inactive_color};" if is_inactive else ""
+                    st.markdown(f"<div style='{title_style}'><strong>{r['Diag_Title']}</strong></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='{detail_style} font-size: 0.85rem;'>{r['Diag_Detail']}</div>", unsafe_allow_html=True)
 
                     unique_key = f"btn_{item['name']}_{r['Creative_ID']}_{idx}"
                     if st.button("분석하기", key=unique_key):
