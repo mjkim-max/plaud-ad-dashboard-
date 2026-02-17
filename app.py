@@ -155,9 +155,9 @@ sel_crv = st.sidebar.multiselect("광고소재필터", crvs)
 status_opt = st.sidebar.radio("게재상태", ["전체", "게재중 (On)", "비게재 (Off)"], index=1)
 if 'Status' in df_filtered.columns:
     if status_opt == "게재중 (On)":
-        df_filtered = df_filtered[df_filtered['Status'] == 'On']
+        df_filtered = df_filtered[df_filtered['Status'].isin(['ACTIVE', 'On'])]
     elif status_opt == "비게재 (Off)":
-        df_filtered = df_filtered[df_filtered['Status'] == 'Off']
+        df_filtered = df_filtered[~df_filtered['Status'].isin(['ACTIVE', 'On'])]
 
 target_df = df_filtered.copy()
 if sel_camp != '전체': target_df = target_df[target_df['Campaign'] == sel_camp]

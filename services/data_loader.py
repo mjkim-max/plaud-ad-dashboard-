@@ -120,6 +120,11 @@ def load_meta_from_api(since: str, until: str):
     except ImportError:
         return pd.DataFrame()
 
+    try:
+        from meta_api import fetch_ad_effective_statuses
+    except Exception:
+        fetch_ad_effective_statuses = None
+
     raw = []
     use_breakdowns = True
     try:
@@ -158,12 +163,13 @@ def load_meta_from_api(since: str, until: str):
             "Campaign": campaign_name,
             "AdGroup": adset_name,
             "Creative_ID": ad_name,
+            "Ad_ID": r.get("ad_id") or "",
             "Cost": _num(r.get("spend")),
             "Impressions": _num(r.get("impressions")),
             "Clicks": _num(r.get("clicks")),
             "Conversions": parse_meta_actions(r.get("actions")),
             "Conversion_Value": parse_meta_action_values(r.get("action_values")),
-            "Status": "On",
+            "Status": "Unknown",
             "Platform": "Meta",
             "Gender": (r.get("gender") or "Unknown") if use_breakdowns else "Unknown",
             "Age": (r.get("age") or "Unknown") if use_breakdowns else "Unknown",
@@ -171,6 +177,21 @@ def load_meta_from_api(since: str, until: str):
 
     df = pd.DataFrame(rows)
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+
+    # 최근 7일 내 지출 있는 광고만 상태 조회
+    try:
+        recent_cutoff = datetime.now().date() - timedelta(days=6)
+        df_recent = df[(df["Date"].dt.date >= recent_cutoff) & (df["Cost"] > 0)]
+        ad_ids = sorted({str(v) for v in df_recent["Ad_ID"].dropna().tolist() if str(v)})
+    except Exception:
+        ad_ids = []
+
+    if fetch_ad_effective_statuses and ad_ids:
+        try:
+            status_map = fetch_ad_effective_statuses(META_AD_ACCOUNT_ID, ad_ids, token=token)
+            df["Status"] = df["Ad_ID"].map(status_map).fillna("Unknown")
+        except Exception:
+            pass
     return df
 
 
