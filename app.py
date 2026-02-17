@@ -338,7 +338,7 @@ if not diag_res.empty:
                     cols = st.columns(7)
                     for col, d_str in zip(cols, cells[row_start:row_start + 7]):
                         if not d_str:
-                            col.markdown("<div class='tl-note'>&nbsp;</div>", unsafe_allow_html=True)
+                            col.markdown("<div class='tl-note'></div>", unsafe_allow_html=True)
                             continue
                         d = datetime.fromisoformat(d_str).date()
                         act = action_by_date.get(d_str, "")
