@@ -34,7 +34,7 @@ st.markdown("""
     hr {margin: 0.5rem 0 !important;}
     .tl-note {font-size: 12px; color: #666; text-align: center;}
     .tl-wrap {background: transparent; border: 0; border-radius: 0; padding: 0;}
-    .tl-panel {background: #efefef; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px;}
+    .tl-panel {background: #efefef; border: 0; border-radius: 8px; padding: 10px;}
     .tl-cell button {width: 48px !important; height: 44px !important; padding: 0 !important;}
     .tl-cell button p {font-size: 11px !important; line-height: 1.1;}
     .tl-form {display: flex; align-items: center; gap: 8px;}
@@ -320,8 +320,8 @@ if not diag_res.empty:
             for _, ar in ad_actions.iterrows():
                 action_by_date[str(ar["action_date"])] = str(ar["action"])
 
-            # 3컬럼: 좌(날짜), 중(입력), 우(진단)
-            tl_left, tl_mid, tl_right = st.columns([1, 1, 1])
+            # 3컬럼: 좌/중/우 + 중간 여백
+            tl_left, gap1, tl_mid, gap2, tl_right = st.columns([3, 0.4, 3, 0.4, 3])
             with tl_left:
                 st.markdown("<div class='tl-panel'>", unsafe_allow_html=True)
                 st.markdown("<div class='tl-wrap'>", unsafe_allow_html=True)
@@ -361,7 +361,6 @@ if not diag_res.empty:
                 st.markdown("</div>", unsafe_allow_html=True)
 
             with tl_mid:
-                st.markdown("<div class='v-divider'>", unsafe_allow_html=True)
                 st.markdown("<div class='tl-panel'>", unsafe_allow_html=True)
                 if selected_date:
                     st.caption(f"선택된 날짜: {selected_date}")
@@ -403,7 +402,6 @@ if not diag_res.empty:
                 st.markdown("</div>", unsafe_allow_html=True)
 
             with tl_right:
-                st.markdown("<div class='v-divider'>", unsafe_allow_html=True)
                 st.markdown("<div class='tl-panel'>", unsafe_allow_html=True)
                 title_style = f"color:{inactive_color};" if is_inactive else ""
                 detail_style = f"color:{inactive_color};" if is_inactive else ""
