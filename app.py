@@ -34,7 +34,7 @@ st.markdown("""
     hr {margin: 0.5rem 0 !important;}
     .tl-note {font-size: 12px; color: #666; text-align: center;}
     .tl-wrap {background: #fafafa; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px;}
-    .tl-cell button {width: 56px !important; height: 44px !important; padding: 0 !important;}
+    .tl-cell button {width: 48px !important; height: 44px !important; padding: 0 !important;}
     .tl-cell button p {font-size: 11px !important; line-height: 1.1;}
     .tl-form {display: flex; align-items: center; gap: 8px;}
 </style>
@@ -311,6 +311,8 @@ if not diag_res.empty:
             start = today - timedelta(days=13)
             dates = [start + timedelta(days=i) for i in range(14)]
             cid = str(r["Creative_ID"])
+            if cid not in st.session_state["action_selected"]:
+                st.session_state["action_selected"][cid] = today.isoformat()
             selected_date = st.session_state["action_selected"].get(cid, "")
 
             if not actions_df.empty:
@@ -323,7 +325,7 @@ if not diag_res.empty:
                 action_by_date[str(ar["action_date"])] = str(ar["action"])
 
             # 타임라인 + 입력 폼 (좌: 캘린더, 우: 입력)
-            tl_left, tl_right = st.columns([3.5, 2])
+            tl_left, tl_right = st.columns([3, 3])
             with tl_left:
                 st.markdown("<div class='tl-wrap'>", unsafe_allow_html=True)
                 weekday_cols = st.columns(7)
@@ -374,18 +376,14 @@ if not diag_res.empty:
                     existing_note = ""
 
                 with st.form(key=f"act_form_{cid}_{selected_date or 'none'}"):
-                    row = st.columns([2, 4, 1])
-                    with row[0]:
-                        action = st.selectbox(
-                            "구분",
-                            ["증액", "보류", "종료", "유지"],
-                            index=["증액", "보류", "종료", "유지"].index(existing_action)
-                            if existing_action in ["증액", "보류", "종료", "유지"] else 0
-                        )
-                    with row[1]:
-                        note = st.text_input("상세 내용", value=existing_note)
-                    with row[2]:
-                        submitted = st.form_submit_button("저장")
+                    action = st.selectbox(
+                        "구분",
+                        ["증액", "보류", "종료", "유지"],
+                        index=["증액", "보류", "종료", "유지"].index(existing_action)
+                        if existing_action in ["증액", "보류", "종료", "유지"] else 0
+                    )
+                    note = st.text_input("상세 내용", value=existing_note)
+                    submitted = st.form_submit_button("저장")
 
                     if submitted:
                         if not selected_date:
