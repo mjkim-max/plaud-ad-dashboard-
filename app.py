@@ -451,7 +451,7 @@ if not diag_res.empty:
 
             with tl_right:
                 st.markdown("<div class='tl-panel'>", unsafe_allow_html=True)
-                st.caption("조치 추천")
+                st.markdown("<div style='font-size: 1.1rem; font-weight: 700; margin-bottom: 6px;'>조치 추천</div>", unsafe_allow_html=True)
                 title_style = f"color:{inactive_color};" if is_inactive else ""
                 detail_style = f"color:{inactive_color};" if is_inactive else ""
                 st.markdown(f"<div style='{title_style}'><strong>{r['Diag_Title']}</strong></div>", unsafe_allow_html=True)
