@@ -42,7 +42,53 @@ GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1jEB4zTYPb2mrxZGXriju
 GOOGLE_DEMO_SHEET_URL = "https://docs.google.com/spreadsheets/d/17z8PyqTdVFyF4QuTUKe6b0T_acWw2QbfvUP8DnTo5LM/edit?gid=29934845#gid=29934845"
 
 # Meta 광고계정 ID (환경변수 우선)
-META_AD_ACCOUNT_ID = os.getenv("META_AD_ACCOUNT_ID", "732978580670026")
+def _get_meta_token() -> str:
+    token = os.getenv("ACCESS_TOKEN")
+    if token:
+        return token
+    try:
+        if "ACCESS_TOKEN" in st.secrets:
+            return str(st.secrets["ACCESS_TOKEN"])
+        for section in ("general", "secrets", "meta"):
+            if section in st.secrets and "ACCESS_TOKEN" in st.secrets[section]:
+                return str(st.secrets[section]["ACCESS_TOKEN"])
+    except Exception:
+        pass
+    return ""
+
+
+def get_meta_token_info() -> dict:
+    """Return non-sensitive token info for debugging."""
+    token = os.getenv("ACCESS_TOKEN")
+    if token:
+        return {"source": "env", "length": len(token), "keys": [], "error": ""}
+    try:
+        if "ACCESS_TOKEN" in st.secrets:
+            t = str(st.secrets["ACCESS_TOKEN"])
+            return {"source": "secrets", "length": len(t), "keys": list(st.secrets.keys()), "error": ""}
+        for section in ("general", "secrets", "meta"):
+            if section in st.secrets and "ACCESS_TOKEN" in st.secrets[section]:
+                t = str(st.secrets[section]["ACCESS_TOKEN"])
+                return {"source": f"secrets:{section}", "length": len(t), "keys": list(st.secrets.keys()), "error": ""}
+    except Exception:
+        return {"source": "missing", "length": 0, "keys": [], "error": "st.secrets 접근 실패"}
+    return {"source": "missing", "length": 0, "keys": list(st.secrets.keys()), "error": ""}
+
+
+def _get_meta_ad_account_id() -> str:
+    acc = os.getenv("META_AD_ACCOUNT_ID")
+    if acc:
+        return acc
+    try:
+        if "META_AD_ACCOUNT_ID" in st.secrets:
+            return str(st.secrets["META_AD_ACCOUNT_ID"])
+    except Exception:
+        pass
+    return "732978580670026"
+
+
+# Meta 광고계정 ID (환경변수/Secrets 우선)
+META_AD_ACCOUNT_ID = _get_meta_ad_account_id()
 GOOGLE_ADS_CUSTOMER_ID = os.getenv("GOOGLE_ADS_CUSTOMER_ID", "")
 
 
@@ -65,7 +111,7 @@ def load_meta_from_api(since: str, until: str):
     since/until: YYYY-MM-DD. 캐시 10분.
     breakdowns 실패 시 자동으로 breakdown 없이 재시도.
     """
-    token = os.getenv("ACCESS_TOKEN")
+    token = _get_meta_token()
     if not token:
         return pd.DataFrame()
 
@@ -217,10 +263,9 @@ def diagnose_meta_no_data() -> str:
     Meta 데이터가 0건일 때 원인 진단. (원본 _diagnose_meta_no_data를 모듈로 이동)
     """
     load_dotenv(_env_path)
-    token = os.getenv("ACCESS_TOKEN")
+    token = _get_meta_token()
     if not token:
-        env_dir = Path(__file__).resolve().parent.parent
-        return f"**ACCESS_TOKEN**이 읽히지 않습니다. `{env_dir}` 안에 파일명이 정확히 **.env**인지 확인하세요. (.env.txt가 아닌지, 확장자 숨김 해제 후 확인)"
+        return "**ACCESS_TOKEN**이 읽히지 않습니다. Streamlit Cloud라면 **Secrets**에 `ACCESS_TOKEN`을 넣었는지 확인하세요. 로컬이면 `.env` 파일명을 다시 확인하세요."
     if token.strip() in ("your_meta_access_token_here", "여기에_토큰_붙여넣기", "paste_token_here"):
         return "**.env**에 아직 예시 값이 들어 있습니다. 실제 토큰으로 바꾼 뒤 **Streamlit을 중지했다가 다시 실행**해 주세요. (브라우저 새로고침만으로는 반영되지 않습니다)"
     def _redact(s: str) -> str:

@@ -12,6 +12,7 @@ from services.data_loader import (
     load_main_data,
     load_google_demo_data,
     diagnose_meta_no_data,
+    get_meta_token_info,
 )
 from services.diagnosis import run_diagnosis
 
@@ -101,6 +102,14 @@ if "Meta" in sel_pl:
     else:
         st.sidebar.caption("Meta 데이터 반영시점")
         st.sidebar.caption("데이터 없음")
+
+    if st.sidebar.checkbox("디버그: 토큰 상태"):
+        info = get_meta_token_info()
+        st.sidebar.caption(f"토큰 소스: {info['source']}")
+        st.sidebar.caption(f"토큰 길이: {info['length']}")
+        st.sidebar.caption(f"secrets 키: {', '.join(info['keys']) if info['keys'] else '-'}")
+        if info.get("error"):
+            st.sidebar.caption(f"secrets 오류: {info['error']}")
 
 if "Google" in sel_pl:
     if google_fetched_at:
