@@ -34,6 +34,7 @@ st.markdown("""
     hr {margin: 0.5rem 0 !important;}
     .tl-note {font-size: 12px; color: #666; text-align: center;}
     .tl-wrap {background: #fafafa; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px;}
+    .tl-panel {background: #efefef; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px;}
     .tl-cell button {width: 48px !important; height: 44px !important; padding: 0 !important;}
     .tl-cell button p {font-size: 11px !important; line-height: 1.1;}
     .tl-form {display: flex; align-items: center; gap: 8px;}
@@ -322,6 +323,7 @@ if not diag_res.empty:
             # 3컬럼: 좌(날짜), 중(입력), 우(진단)
             tl_left, tl_mid, tl_right = st.columns([1, 1, 1])
             with tl_left:
+                st.markdown("<div class='tl-panel'>", unsafe_allow_html=True)
                 st.markdown("<div class='tl-wrap'>", unsafe_allow_html=True)
                 weekday_cols = st.columns(7)
                 weekday_labels = ["일", "월", "화", "수", "목", "금", "토"]
@@ -356,9 +358,11 @@ if not diag_res.empty:
                                 pass
                             st.markdown("</div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
             with tl_mid:
                 st.markdown("<div class='v-divider'>", unsafe_allow_html=True)
+                st.markdown("<div class='tl-panel'>", unsafe_allow_html=True)
                 if selected_date:
                     st.caption(f"선택된 날짜: {selected_date}")
                 else:
@@ -395,6 +399,7 @@ if not diag_res.empty:
                                 author="",
                             )
                             st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
 
             with tl_right:
