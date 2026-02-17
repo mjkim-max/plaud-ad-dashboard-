@@ -192,6 +192,43 @@ st.title("광고 성과 관리 대시보드")
 
 st.subheader("1. 캠페인 성과 진단")
 
+# 조치 내용 출력
+st.markdown("<div class='sec-divider'></div>", unsafe_allow_html=True)
+st.markdown("##### 조치 내용 출력")
+report_cols = st.columns([2, 1, 6])
+with report_cols[0]:
+    report_date = st.date_input("날짜 선택", datetime.now().date(), key="action_report_date")
+with report_cols[1]:
+    run_report = st.button("출력", key="action_report_btn")
+
+if run_report:
+    actions_df = load_actions()
+    report_date_str = report_date.isoformat()
+    if actions_df.empty:
+        st.info("조치 내용이 없습니다.")
+    else:
+        actions_day = actions_df[actions_df["action_date"] == report_date_str]
+        if actions_day.empty:
+            st.info("선택한 날짜의 조치 내용이 없습니다.")
+        else:
+            # 선택 날짜에 Spend 1 이상인 소재만
+            df_day = df_raw.copy()
+            if "Date" in df_day.columns:
+                df_day = df_day[df_day["Date"].dt.date == report_date]
+            df_day = df_day[df_day["Cost"] >= 1] if "Cost" in df_day.columns else df_day
+            valid_creatives = set(df_day["Creative_ID"].astype(str).tolist()) if "Creative_ID" in df_day.columns else set()
+
+            filtered = actions_day[actions_day["creative_id"].astype(str).isin(valid_creatives)]
+            if filtered.empty:
+                st.info("선택한 날짜에 Spend 1 이상인 소재의 조치 내용이 없습니다.")
+            else:
+                st.markdown(f"**{report_date.month}/{report_date.day} 조치내용**")
+                for _, row in filtered.iterrows():
+                    st.markdown(
+                        f"{row.get('campaign','')} / {row.get('creative_id','')} / "
+                        f"{row.get('action','')} / {row.get('note','')}"
+                    )
+
 # 진단 기간: 오늘 포함 최근 15일 (오늘 + 전일기준 14일 모두 포함)
 _today_ts = pd.Timestamp(datetime.now().date())
 if not df_raw.empty and "Date" in df_raw.columns:
@@ -381,7 +418,7 @@ if not diag_res.empty:
                         index=["증액", "보류", "종료", "유지"].index(existing_action)
                         if existing_action in ["증액", "보류", "종료", "유지"] else 0
                     )
-                    note = st.text_input("상세 내용", value=existing_note)
+                    note = st.text_area("상세 내용", value=existing_note, height=90)
                     submitted = st.form_submit_button("저장")
 
                     if submitted:
