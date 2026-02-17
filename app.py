@@ -32,7 +32,11 @@ st.markdown("""
     div[data-testid="stExpanderDetails"] {padding-top: 0.5rem; padding-bottom: 0.5rem;}
     p {margin-bottom: 0px !important;} 
     hr {margin: 0.5rem 0 !important;}
-    .tl-note {font-size: 12px; color: #666;}
+    .tl-note {font-size: 12px; color: #666; text-align: center;}
+    .tl-wrap {background: #fafafa; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px;}
+    .tl-cell button {width: 56px !important; height: 44px !important; padding: 0 !important;}
+    .tl-cell button p {font-size: 11px !important; line-height: 1.1;}
+    .tl-form {display: flex; align-items: center; gap: 8px;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -286,60 +290,74 @@ if not diag_res.empty:
             for _, ar in ad_actions.iterrows():
                 action_by_date[str(ar["action_date"])] = str(ar["action"])
 
-            st.caption("최근 14일 조치 타임라인")
-            # 요일 헤더
-            weekday_cols = st.columns(7)
-            weekday_labels = ["일", "월", "화", "수", "목", "금", "토"]
-            for col, lbl in zip(weekday_cols, weekday_labels):
-                col.markdown(f"<div class='tl-note'><strong>{lbl}</strong></div>", unsafe_allow_html=True)
+            # 타임라인 + 입력 폼 (좌: 캘린더, 우: 입력)
+            tl_left, tl_right = st.columns([3.5, 2])
+            with tl_left:
+                st.markdown("<div class='tl-wrap'>", unsafe_allow_html=True)
+                weekday_cols = st.columns(7)
+                weekday_labels = ["일", "월", "화", "수", "목", "금", "토"]
+                for col, lbl in zip(weekday_cols, weekday_labels):
+                    col.markdown(f"<div class='tl-note'><strong>{lbl}</strong></div>", unsafe_allow_html=True)
 
-            # 2주(7x2) 그리드
-            for row_start in range(0, 14, 7):
-                row_dates = dates[row_start:row_start + 7]
-                cols = st.columns(7)
-                for col, d in zip(cols, row_dates):
-                    d_str = d.isoformat()
-                    act = action_by_date.get(d_str, "")
-                    icon = "⬜"
-                    if act == "증액":
-                        icon = "🟦"
-                    elif act == "보류":
-                        icon = "🟨"
-                    elif act == "종료":
-                        icon = "🟥"
-                    label = f"{icon}{d.strftime('%m/%d')}"
-                    if col.button(label, key=f"tl_{cid}_{d_str}"):
-                        st.session_state["action_selected"][cid] = d_str
+                for row_start in range(0, 14, 7):
+                    row_dates = dates[row_start:row_start + 7]
+                    cols = st.columns(7)
+                    for col, d in zip(cols, row_dates):
+                        d_str = d.isoformat()
+                        act = action_by_date.get(d_str, "")
+                        icon = "⬜"
+                        if act == "증액":
+                            icon = "🟦"
+                        elif act == "보류":
+                            icon = "🟨"
+                        elif act == "종료":
+                            icon = "🟥"
+                        label = f"{icon}{d.strftime('%m/%d')}"
+                        with col:
+                            st.markdown("<div class='tl-cell'>", unsafe_allow_html=True)
+                            if st.button(label, key=f"tl_{cid}_{d_str}"):
+                                st.session_state["action_selected"][cid] = d_str
+                            st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
-            # 선택 날짜 입력/수정 폼
-            if selected_date:
-                existing = ad_actions[ad_actions["action_date"] == selected_date]
-                existing_action = existing["action"].iloc[0] if not existing.empty else ""
-                existing_note = existing["note"].iloc[0] if not existing.empty else ""
+            with tl_right:
+                if selected_date:
+                    existing = ad_actions[ad_actions["action_date"] == selected_date]
+                    existing_action = existing["action"].iloc[0] if not existing.empty else ""
+                    existing_note = existing["note"].iloc[0] if not existing.empty else ""
+                else:
+                    existing_action = ""
+                    existing_note = ""
 
-                with st.form(key=f"act_form_{cid}_{selected_date}"):
+                with st.form(key=f"act_form_{cid}_{selected_date or 'none'}"):
+                    st.markdown("<div class='tl-form'>", unsafe_allow_html=True)
                     action = st.selectbox(
                         "구분",
                         ["증액", "보류", "종료", "유지"],
                         index=["증액", "보류", "종료", "유지"].index(existing_action)
                         if existing_action in ["증액", "보류", "종료", "유지"] else 0
                     )
-                    note = st.text_area("상세 내용", value=existing_note, height=80)
                     submitted = st.form_submit_button("저장")
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                    note = st.text_area("상세 내용", value=existing_note, height=80)
+
                     if submitted:
-                        upsert_action(
-                            action_date=selected_date,
-                            creative_id=cid,
-                            campaign=str(r.get("Campaign", "")),
-                            adgroup=str(r.get("AdGroup", "")),
-                            action=action,
-                            note=note,
-                            author="",
-                        )
-                        st.rerun()
-            else:
-                st.caption("날짜를 선택하면 조치 입력/수정이 가능합니다.")
-                col0, col1, col2, col3, col4 = st.columns([1, 1, 1, 1, 1.2])
+                        if not selected_date:
+                            st.info("날짜를 먼저 선택하세요.")
+                        else:
+                            upsert_action(
+                                action_date=selected_date,
+                                creative_id=cid,
+                                campaign=str(r.get("Campaign", "")),
+                                adgroup=str(r.get("AdGroup", "")),
+                                action=action,
+                                note=note,
+                                author="",
+                            )
+                            st.rerun()
+
+            col0, col1, col2, col3, col4 = st.columns([1, 1, 1, 1, 1.2])
 
                 def format_stat_block(label, cpa, cost, conv, text_color):
                     cpa_val = "∞" if cpa == np.inf or (isinstance(cpa, float) and np.isinf(cpa)) else f"{cpa:,.0f}"
