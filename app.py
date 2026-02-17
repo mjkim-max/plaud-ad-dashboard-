@@ -7,7 +7,6 @@ try:
 except Exception:
     go = None
 import streamlit as st
-from urllib.parse import quote as url_quote
 
 from services.data_loader import (
     load_main_data,
@@ -33,13 +32,7 @@ st.markdown("""
     div[data-testid="stExpanderDetails"] {padding-top: 0.5rem; padding-bottom: 0.5rem;}
     p {margin-bottom: 0px !important;} 
     hr {margin: 0.5rem 0 !important;}
-    .tl-row {display: flex; gap: 6px; overflow-x: auto; padding: 6px 0 2px 0;}
-    .tl-box {min-width: 34px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
-        border-radius: 6px; border: 1px solid #e0e0e0; font-size: 12px; text-decoration: none; color: #222;}
-    .tl-inc {background: #e3f2fd; border-color: #90caf9; color: #0d47a1;}
-    .tl-hold {background: #fff8e1; border-color: #ffe082; color: #8d6e63;}
-    .tl-stop {background: #ffebee; border-color: #ef9a9a; color: #b71c1c;}
-    .tl-none {background: #ffffff;}
+    .tl-note {font-size: 12px; color: #666;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -50,21 +43,10 @@ if 'chart_target_adgroup' not in st.session_state:
     st.session_state['chart_target_adgroup'] = None
 if "action_mode" not in st.session_state:
     st.session_state["action_mode"] = ""
+if "action_selected" not in st.session_state:
+    st.session_state["action_selected"] = {}
 
 
-def _get_qp_value(key: str) -> str:
-    try:
-        return str(st.query_params.get(key, ""))
-    except Exception:
-        return str(st.experimental_get_query_params().get(key, [""])[0])
-
-
-def _set_qp_values(**kwargs) -> None:
-    try:
-        for k, v in kwargs.items():
-            st.query_params[k] = v
-    except Exception:
-        st.experimental_set_query_params(**kwargs)
 
 # -----------------------------------------------------------------------------
 # 3. 사이드바 & 데이터 준비
@@ -288,13 +270,12 @@ if not diag_res.empty:
                 unsafe_allow_html=True,
             )
 
-            # 소재별 타임라인 (최근 30일)
+            # 소재별 타임라인 (최근 30일, 표형식)
             today = datetime.now().date()
             start = today - timedelta(days=29)
             dates = [start + timedelta(days=i) for i in range(30)]
             cid = str(r["Creative_ID"])
-            selected_cid = _get_qp_value("action_creative")
-            selected_date = _get_qp_value("action_date")
+            selected_date = st.session_state["action_selected"].get(cid, "")
 
             if not actions_df.empty:
                 ad_actions = actions_df[actions_df["creative_id"] == cid]
@@ -305,61 +286,71 @@ if not diag_res.empty:
             for _, ar in ad_actions.iterrows():
                 action_by_date[str(ar["action_date"])] = str(ar["action"])
 
-            boxes = []
-            for d in dates:
-                d_str = d.isoformat()
-                act = action_by_date.get(d_str, "")
-                cls = "tl-none"
-                if act == "증액":
-                    cls = "tl-inc"
-                elif act == "보류":
-                    cls = "tl-hold"
-                elif act == "종료":
-                    cls = "tl-stop"
-                href = f"?action_creative={url_quote(cid)}&action_date={d_str}"
-                boxes.append(f"<a class='tl-box {cls}' href='{href}'>{d.strftime('%d')}</a>")
-            st.markdown(f"<div class='tl-row'>{''.join(boxes)}</div>", unsafe_allow_html=True)
+            title_cols = st.columns([6, 1])
+            with title_cols[1]:
+                btn_label = "입력"
+                if selected_date and selected_date in action_by_date:
+                    btn_label = "수정"
+                if st.button(btn_label, key=f"act_edit_{cid}"):
+                    if not selected_date:
+                        selected_date = today.isoformat()
+                        st.session_state["action_selected"][cid] = selected_date
+                    st.session_state["action_mode"] = "edit"
 
-            if selected_cid == cid and selected_date:
+            st.caption("최근 30일 조치 타임라인")
+            for row_start in range(0, 30, 10):
+                row_dates = dates[row_start:row_start + 10]
+                cols = st.columns(10)
+                for col, d in zip(cols, row_dates):
+                    d_str = d.isoformat()
+                    act = action_by_date.get(d_str, "")
+                    icon = "⬜"
+                    if act == "증액":
+                        icon = "🟦"
+                    elif act == "보류":
+                        icon = "🟨"
+                    elif act == "종료":
+                        icon = "🟥"
+                    label = f\"{icon}{d.strftime('%d')}\"
+                    if col.button(label, key=f\"tl_{cid}_{d_str}\"):
+                        st.session_state[\"action_selected\"][cid] = d_str
+
+            if selected_date:
                 has_action = selected_date in action_by_date
-                c1, c2, c3 = st.columns([1, 1, 6])
+                c1, c2 = st.columns([1, 8])
                 with c1:
-                    if st.button("입력하기" if not has_action else "수정하기", key=f"act_edit_{cid}_{selected_date}"):
-                        st.session_state["action_mode"] = "edit"
-                with c2:
-                    if has_action and st.button("삭제", key=f"act_del_{cid}_{selected_date}"):
+                    if has_action and st.button(\"삭제\", key=f\"act_del_{cid}_{selected_date}\"):
                         delete_action(action_date=selected_date, creative_id=cid)
-                        _set_qp_values(action_creative=cid, action_date=selected_date)
-                        st.session_state["action_mode"] = ""
+                        st.session_state[\"action_mode\"] = \"\"
                         st.rerun()
 
-                if st.session_state.get("action_mode") == "edit":
-                    existing = ad_actions[ad_actions["action_date"] == selected_date]
-                    existing_action = existing["action"].iloc[0] if not existing.empty else ""
-                    existing_note = existing["note"].iloc[0] if not existing.empty else ""
-                    existing_author = existing["author"].iloc[0] if not existing.empty else ""
+                if st.session_state.get(\"action_mode\") == \"edit\":
+                    existing = ad_actions[ad_actions[\"action_date\"] == selected_date]
+                    existing_action = existing[\"action\"].iloc[0] if not existing.empty else \"\"
+                    existing_note = existing[\"note\"].iloc[0] if not existing.empty else \"\"
+                    existing_author = existing[\"author\"].iloc[0] if not existing.empty else \"\"
 
-                    with st.form(key=f"act_form_{cid}_{selected_date}"):
+                    with st.form(key=f\"act_form_{cid}_{selected_date}\"):
                         action = st.selectbox(
-                            "조치",
-                            ["증액", "보류", "종료", "유지"],
-                            index=["증액", "보류", "종료", "유지"].index(existing_action)
-                            if existing_action in ["증액", "보류", "종료", "유지"] else 0
+                            \"조치\",
+                            [\"증액\", \"보류\", \"종료\", \"유지\"],
+                            index=[\"증액\", \"보류\", \"종료\", \"유지\"].index(existing_action)
+                            if existing_action in [\"증액\", \"보류\", \"종료\", \"유지\"] else 0
                         )
-                        note = st.text_input("메모", value=existing_note)
-                        author = st.text_input("담당자", value=existing_author)
-                        submitted = st.form_submit_button("저장")
+                        note = st.text_input(\"메모\", value=existing_note)
+                        author = st.text_input(\"담당자\", value=existing_author)
+                        submitted = st.form_submit_button(\"저장\")
                         if submitted:
                             upsert_action(
                                 action_date=selected_date,
                                 creative_id=cid,
-                                campaign=str(r.get("Campaign", "")),
-                                adgroup=str(r.get("AdGroup", "")),
+                                campaign=str(r.get(\"Campaign\", \"\")),
+                                adgroup=str(r.get(\"AdGroup\", \"\")),
                                 action=action,
                                 note=note,
                                 author=author,
                             )
-                            st.session_state["action_mode"] = ""
+                            st.session_state[\"action_mode\"] = \"\"
                             st.rerun()
                 col0, col1, col2, col3, col4 = st.columns([1, 1, 1, 1, 1.2])
 
