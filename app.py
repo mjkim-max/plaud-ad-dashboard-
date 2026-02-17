@@ -37,6 +37,8 @@ st.markdown("""
     .tl-cell button {width: 48px !important; height: 44px !important; padding: 0 !important;}
     .tl-cell button p {font-size: 11px !important; line-height: 1.1;}
     .tl-form {display: flex; align-items: center; gap: 8px;}
+    .sec-divider {border-top: 1px solid #eef0f2; margin: 10px 0;}
+    .v-divider {border-left: 1px solid #eef0f2; padding-left: 12px; height: 100%;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -265,7 +267,7 @@ if not diag_res.empty:
             with c_7d: st.markdown(fmt_head("7일(전일기준)", *item['stats_7']), unsafe_allow_html=True)
             with c_14d: st.markdown(fmt_head("14일(전일기준)", *item['stats_14']), unsafe_allow_html=True)
 
-            st.markdown("<hr style='margin: 10px 0; border: none; border-top: 1px solid #f0f2f6;'>", unsafe_allow_html=True)
+            st.markdown("<div class='sec-divider'></div>", unsafe_allow_html=True)
             st.markdown("##### 소재별 진단")
 
             for idx, (_, r) in enumerate(item['data'].iterrows()):
@@ -356,6 +358,7 @@ if not diag_res.empty:
                 st.markdown("</div>", unsafe_allow_html=True)
 
             with tl_mid:
+                st.markdown("<div class='v-divider'>", unsafe_allow_html=True)
                 if selected_date:
                     st.caption(f"선택된 날짜: {selected_date}")
                 else:
@@ -392,8 +395,10 @@ if not diag_res.empty:
                                 author="",
                             )
                             st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
 
             with tl_right:
+                st.markdown("<div class='v-divider'>", unsafe_allow_html=True)
                 title_style = f"color:{inactive_color};" if is_inactive else ""
                 detail_style = f"color:{inactive_color};" if is_inactive else ""
                 st.markdown(f"<div style='{title_style}'><strong>{r['Diag_Title']}</strong></div>", unsafe_allow_html=True)
@@ -403,8 +408,9 @@ if not diag_res.empty:
                     st.session_state['chart_target_creative'] = r['Creative_ID']
                     st.session_state['chart_target_adgroup'] = r['AdGroup']
                     st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
 
-            st.markdown("<hr style='margin: 5px 0; border: none; border-top: 1px solid #f0f2f6;'>", unsafe_allow_html=True)
+            st.markdown("<div class='sec-divider'></div>", unsafe_allow_html=True)
 else:
     st.info("진단 데이터 부족")
 
