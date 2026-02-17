@@ -33,7 +33,7 @@ st.markdown("""
     p {margin-bottom: 0px !important;} 
     hr {margin: 0.5rem 0 !important;}
     .tl-note {font-size: 12px; color: #666; text-align: center;}
-    .tl-wrap {background: #fafafa; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px;}
+    .tl-wrap {background: transparent; border: 0; border-radius: 0; padding: 0;}
     .tl-panel {background: #efefef; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px;}
     .tl-cell button {width: 48px !important; height: 44px !important; padding: 0 !important;}
     .tl-cell button p {font-size: 11px !important; line-height: 1.1;}
