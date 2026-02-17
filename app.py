@@ -311,9 +311,9 @@ if not diag_res.empty:
                         icon = "🟨"
                     elif act == "종료":
                         icon = "🟥"
-                    label = f\"{icon}{d.strftime('%d')}\"
-                    if col.button(label, key=f\"tl_{cid}_{d_str}\"):
-                        st.session_state[\"action_selected\"][cid] = d_str
+                    label = f"{icon}{d.strftime('%d')}"
+                    if col.button(label, key=f"tl_{cid}_{d_str}"):
+                        st.session_state["action_selected"][cid] = d_str
 
             if selected_date:
                 has_action = selected_date in action_by_date
