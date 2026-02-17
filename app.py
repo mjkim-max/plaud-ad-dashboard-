@@ -274,89 +274,6 @@ if not diag_res.empty:
                 unsafe_allow_html=True,
             )
 
-            # 소재별 타임라인 (최근 14일, 표형식)
-            today = datetime.now().date()
-            start = today - timedelta(days=13)
-            dates = [start + timedelta(days=i) for i in range(14)]
-            cid = str(r["Creative_ID"])
-            selected_date = st.session_state["action_selected"].get(cid, "")
-
-            if not actions_df.empty:
-                ad_actions = actions_df[actions_df["creative_id"] == cid]
-            else:
-                ad_actions = pd.DataFrame(columns=actions_df.columns)
-
-            action_by_date = {}
-            for _, ar in ad_actions.iterrows():
-                action_by_date[str(ar["action_date"])] = str(ar["action"])
-
-            # 타임라인 + 입력 폼 (좌: 캘린더, 우: 입력)
-            tl_left, tl_right = st.columns([3.5, 2])
-            with tl_left:
-                st.markdown("<div class='tl-wrap'>", unsafe_allow_html=True)
-                weekday_cols = st.columns(7)
-                weekday_labels = ["일", "월", "화", "수", "목", "금", "토"]
-                for col, lbl in zip(weekday_cols, weekday_labels):
-                    col.markdown(f"<div class='tl-note'><strong>{lbl}</strong></div>", unsafe_allow_html=True)
-
-                for row_start in range(0, 14, 7):
-                    row_dates = dates[row_start:row_start + 7]
-                    cols = st.columns(7)
-                    for col, d in zip(cols, row_dates):
-                        d_str = d.isoformat()
-                        act = action_by_date.get(d_str, "")
-                        icon = "⬜"
-                        if act == "증액":
-                            icon = "🟦"
-                        elif act == "보류":
-                            icon = "🟨"
-                        elif act == "종료":
-                            icon = "🟥"
-                        label = f"{icon}{d.strftime('%m/%d')}"
-                        with col:
-                            st.markdown("<div class='tl-cell'>", unsafe_allow_html=True)
-                            if st.button(label, key=f"tl_{cid}_{d_str}"):
-                                st.session_state["action_selected"][cid] = d_str
-                            st.markdown("</div>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-
-            with tl_right:
-                if selected_date:
-                    existing = ad_actions[ad_actions["action_date"] == selected_date]
-                    existing_action = existing["action"].iloc[0] if not existing.empty else ""
-                    existing_note = existing["note"].iloc[0] if not existing.empty else ""
-                else:
-                    existing_action = ""
-                    existing_note = ""
-
-                with st.form(key=f"act_form_{cid}_{selected_date or 'none'}"):
-                    st.markdown("<div class='tl-form'>", unsafe_allow_html=True)
-                    action = st.selectbox(
-                        "구분",
-                        ["증액", "보류", "종료", "유지"],
-                        index=["증액", "보류", "종료", "유지"].index(existing_action)
-                        if existing_action in ["증액", "보류", "종료", "유지"] else 0
-                    )
-                    submitted = st.form_submit_button("저장")
-                    st.markdown("</div>", unsafe_allow_html=True)
-
-                    note = st.text_area("상세 내용", value=existing_note, height=80)
-
-                    if submitted:
-                        if not selected_date:
-                            st.info("날짜를 먼저 선택하세요.")
-                        else:
-                            upsert_action(
-                                action_date=selected_date,
-                                creative_id=cid,
-                                campaign=str(r.get("Campaign", "")),
-                                adgroup=str(r.get("AdGroup", "")),
-                                action=action,
-                                note=note,
-                                author="",
-                            )
-                            st.rerun()
-
             col0, col1, col2, col3, col4 = st.columns([1, 1, 1, 1, 1.2])
 
             def format_stat_block(label, cpa, cost, conv, text_color):
@@ -389,7 +306,99 @@ if not diag_res.empty:
                     st.session_state['chart_target_adgroup'] = r['AdGroup']
                     st.rerun()
 
-                st.markdown("<hr style='margin: 5px 0; border: none; border-top: 1px solid #f0f2f6;'>", unsafe_allow_html=True)
+            # 소재별 타임라인 (최근 14일, 표형식)
+            today = datetime.now().date()
+            start = today - timedelta(days=13)
+            dates = [start + timedelta(days=i) for i in range(14)]
+            cid = str(r["Creative_ID"])
+            selected_date = st.session_state["action_selected"].get(cid, "")
+
+            if not actions_df.empty:
+                ad_actions = actions_df[actions_df["creative_id"] == cid]
+            else:
+                ad_actions = pd.DataFrame(columns=actions_df.columns)
+
+            action_by_date = {}
+            for _, ar in ad_actions.iterrows():
+                action_by_date[str(ar["action_date"])] = str(ar["action"])
+
+            # 타임라인 + 입력 폼 (좌: 캘린더, 우: 입력)
+            tl_left, tl_right = st.columns([3.5, 2])
+            with tl_left:
+                st.markdown("<div class='tl-wrap'>", unsafe_allow_html=True)
+                weekday_cols = st.columns(7)
+                weekday_labels = ["일", "월", "화", "수", "목", "금", "토"]
+                for col, lbl in zip(weekday_cols, weekday_labels):
+                    col.markdown(f"<div class='tl-note'><strong>{lbl}</strong></div>", unsafe_allow_html=True)
+
+                # 요일 정렬을 위한 빈 칸 보정
+                offset = (start.weekday() + 1) % 7  # Sunday=0
+                cells = [""] * offset + [d.isoformat() for d in dates]
+                while len(cells) % 7 != 0:
+                    cells.append("")
+
+                for row_start in range(0, len(cells), 7):
+                    cols = st.columns(7)
+                    for col, d_str in zip(cols, cells[row_start:row_start + 7]):
+                        if not d_str:
+                            col.markdown("<div class='tl-note'>&nbsp;</div>", unsafe_allow_html=True)
+                            continue
+                        d = datetime.fromisoformat(d_str).date()
+                        act = action_by_date.get(d_str, "")
+                        icon = "⬜"
+                        if act == "증액":
+                            icon = "🟦"
+                        elif act == "보류":
+                            icon = "🟨"
+                        elif act == "종료":
+                            icon = "🟥"
+                        label = f"{icon}{d.strftime('%m/%d')}"
+                        with col:
+                            st.markdown("<div class='tl-cell'>", unsafe_allow_html=True)
+                            if st.button(label, key=f"tl_{cid}_{d_str}"):
+                                st.session_state["action_selected"][cid] = d_str
+                            st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            with tl_right:
+                if selected_date:
+                    existing = ad_actions[ad_actions["action_date"] == selected_date]
+                    existing_action = existing["action"].iloc[0] if not existing.empty else ""
+                    existing_note = existing["note"].iloc[0] if not existing.empty else ""
+                else:
+                    existing_action = ""
+                    existing_note = ""
+
+                with st.form(key=f"act_form_{cid}_{selected_date or 'none'}"):
+                    row = st.columns([2, 4, 1])
+                    with row[0]:
+                        action = st.selectbox(
+                            "구분",
+                            ["증액", "보류", "종료", "유지"],
+                            index=["증액", "보류", "종료", "유지"].index(existing_action)
+                            if existing_action in ["증액", "보류", "종료", "유지"] else 0
+                        )
+                    with row[1]:
+                        note = st.text_input("상세 내용", value=existing_note)
+                    with row[2]:
+                        submitted = st.form_submit_button("저장")
+
+                    if submitted:
+                        if not selected_date:
+                            st.info("날짜를 먼저 선택하세요.")
+                        else:
+                            upsert_action(
+                                action_date=selected_date,
+                                creative_id=cid,
+                                campaign=str(r.get("Campaign", "")),
+                                adgroup=str(r.get("AdGroup", "")),
+                                action=action,
+                                note=note,
+                                author="",
+                            )
+                            st.rerun()
+
+            st.markdown("<hr style='margin: 5px 0; border: none; border-top: 1px solid #f0f2f6;'>", unsafe_allow_html=True)
 else:
     st.info("진단 데이터 부족")
 
