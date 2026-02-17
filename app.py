@@ -319,38 +319,38 @@ if not diag_res.empty:
                 has_action = selected_date in action_by_date
                 c1, c2 = st.columns([1, 8])
                 with c1:
-                    if has_action and st.button(\"삭제\", key=f\"act_del_{cid}_{selected_date}\"):
+                    if has_action and st.button("삭제", key=f"act_del_{cid}_{selected_date}"):
                         delete_action(action_date=selected_date, creative_id=cid)
-                        st.session_state[\"action_mode\"] = \"\"
+                        st.session_state["action_mode"] = ""
                         st.rerun()
 
-                if st.session_state.get(\"action_mode\") == \"edit\":
-                    existing = ad_actions[ad_actions[\"action_date\"] == selected_date]
-                    existing_action = existing[\"action\"].iloc[0] if not existing.empty else \"\"
-                    existing_note = existing[\"note\"].iloc[0] if not existing.empty else \"\"
-                    existing_author = existing[\"author\"].iloc[0] if not existing.empty else \"\"
+                if st.session_state.get("action_mode") == "edit":
+                    existing = ad_actions[ad_actions["action_date"] == selected_date]
+                    existing_action = existing["action"].iloc[0] if not existing.empty else ""
+                    existing_note = existing["note"].iloc[0] if not existing.empty else ""
+                    existing_author = existing["author"].iloc[0] if not existing.empty else ""
 
-                    with st.form(key=f\"act_form_{cid}_{selected_date}\"):
+                    with st.form(key=f"act_form_{cid}_{selected_date}"):
                         action = st.selectbox(
-                            \"조치\",
-                            [\"증액\", \"보류\", \"종료\", \"유지\"],
-                            index=[\"증액\", \"보류\", \"종료\", \"유지\"].index(existing_action)
-                            if existing_action in [\"증액\", \"보류\", \"종료\", \"유지\"] else 0
+                            "조치",
+                            ["증액", "보류", "종료", "유지"],
+                            index=["증액", "보류", "종료", "유지"].index(existing_action)
+                            if existing_action in ["증액", "보류", "종료", "유지"] else 0
                         )
-                        note = st.text_input(\"메모\", value=existing_note)
-                        author = st.text_input(\"담당자\", value=existing_author)
-                        submitted = st.form_submit_button(\"저장\")
+                        note = st.text_input("메모", value=existing_note)
+                        author = st.text_input("담당자", value=existing_author)
+                        submitted = st.form_submit_button("저장")
                         if submitted:
                             upsert_action(
                                 action_date=selected_date,
                                 creative_id=cid,
-                                campaign=str(r.get(\"Campaign\", \"\")),
-                                adgroup=str(r.get(\"AdGroup\", \"\")),
+                                campaign=str(r.get("Campaign", "")),
+                                adgroup=str(r.get("AdGroup", "")),
                                 action=action,
                                 note=note,
                                 author=author,
                             )
-                            st.session_state[\"action_mode\"] = \"\"
+                            st.session_state["action_mode"] = ""
                             st.rerun()
                 col0, col1, col2, col3, col4 = st.columns([1, 1, 1, 1, 1.2])
 
