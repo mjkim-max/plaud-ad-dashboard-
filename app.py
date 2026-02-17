@@ -321,9 +321,9 @@ if not diag_res.empty:
                 action_by_date[str(ar["action_date"])] = str(ar["action"])
 
             # 3컬럼: 좌(날짜), 중(입력), 우(진단)
-            st.markdown("<div class='tl-panel'>", unsafe_allow_html=True)
             tl_left, tl_mid, tl_right = st.columns([1, 1, 1])
             with tl_left:
+                st.markdown("<div class='tl-panel'>", unsafe_allow_html=True)
                 st.markdown("<div class='tl-wrap'>", unsafe_allow_html=True)
                 weekday_cols = st.columns(7)
                 weekday_labels = ["일", "월", "화", "수", "목", "금", "토"]
@@ -358,9 +358,11 @@ if not diag_res.empty:
                                 pass
                             st.markdown("</div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
             with tl_mid:
                 st.markdown("<div class='v-divider'>", unsafe_allow_html=True)
+                st.markdown("<div class='tl-panel'>", unsafe_allow_html=True)
                 if selected_date:
                     st.caption(f"선택된 날짜: {selected_date}")
                 else:
@@ -398,9 +400,11 @@ if not diag_res.empty:
                             )
                             st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
             with tl_right:
                 st.markdown("<div class='v-divider'>", unsafe_allow_html=True)
+                st.markdown("<div class='tl-panel'>", unsafe_allow_html=True)
                 title_style = f"color:{inactive_color};" if is_inactive else ""
                 detail_style = f"color:{inactive_color};" if is_inactive else ""
                 st.markdown(f"<div style='{title_style}'><strong>{r['Diag_Title']}</strong></div>", unsafe_allow_html=True)
@@ -411,7 +415,6 @@ if not diag_res.empty:
                     st.session_state['chart_target_adgroup'] = r['AdGroup']
                     st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
 
             st.markdown("<div class='sec-divider'></div>", unsafe_allow_html=True)
 else:
