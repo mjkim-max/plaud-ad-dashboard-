@@ -352,7 +352,7 @@ if not diag_res.empty:
                             icon = "🟨"
                         elif act == "종료":
                             icon = "🟥"
-                        label = f"{icon}{d.strftime('%m/%d')}"
+                        label = f"{icon}\n{d.strftime('%m/%d')}"
                         with col:
                             st.markdown("<div class='tl-cell'>", unsafe_allow_html=True)
                             if st.button(label, key=f"tl_{cid}_{d_str}"):
@@ -361,6 +361,10 @@ if not diag_res.empty:
                 st.markdown("</div>", unsafe_allow_html=True)
 
             with tl_right:
+                if selected_date:
+                    st.caption(f"선택된 날짜: {selected_date}")
+                else:
+                    st.caption("선택된 날짜: 없음")
                 if selected_date:
                     existing = ad_actions[ad_actions["action_date"] == selected_date]
                     existing_action = existing["action"].iloc[0] if not existing.empty else ""
