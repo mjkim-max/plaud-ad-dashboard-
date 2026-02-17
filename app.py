@@ -51,6 +51,12 @@ if "action_selected" not in st.session_state:
     st.session_state["action_selected"] = {}
 
 
+def _set_selected_date(cid: str, d_str: str) -> None:
+    current = dict(st.session_state.get("action_selected", {}))
+    current[cid] = d_str
+    st.session_state["action_selected"] = current
+
+
 
 # -----------------------------------------------------------------------------
 # 3. 사이드바 & 데이터 준비
@@ -312,7 +318,7 @@ if not diag_res.empty:
             dates = [start + timedelta(days=i) for i in range(14)]
             cid = str(r["Creative_ID"])
             if cid not in st.session_state["action_selected"]:
-                st.session_state["action_selected"][cid] = today.isoformat()
+                _set_selected_date(cid, today.isoformat())
             selected_date = st.session_state["action_selected"].get(cid, "")
 
             if not actions_df.empty:
@@ -357,8 +363,8 @@ if not diag_res.empty:
                         label = f"{icon}\n{d.strftime('%m/%d')}"
                         with col:
                             st.markdown("<div class='tl-cell'>", unsafe_allow_html=True)
-                            if st.button(label, key=f"tl_{cid}_{d_str}"):
-                                st.session_state["action_selected"][cid] = d_str
+                            if st.button(label, key=f"tl_{cid}_{d_str}", on_click=_set_selected_date, args=(cid, d_str)):
+                                pass
                             st.markdown("</div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
 
