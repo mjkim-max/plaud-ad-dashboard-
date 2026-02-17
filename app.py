@@ -359,35 +359,35 @@ if not diag_res.empty:
 
             col0, col1, col2, col3, col4 = st.columns([1, 1, 1, 1, 1.2])
 
-                def format_stat_block(label, cpa, cost, conv, text_color):
-                    cpa_val = "∞" if cpa == np.inf or (isinstance(cpa, float) and np.isinf(cpa)) else f"{cpa:,.0f}"
-                    return (
-                        f"<div style=\"line-height:1.6; color:{text_color};\">"
-                        f"<strong>{label}</strong><br>CPA <strong>{cpa_val}원</strong><br>"
-                        f"비용 {cost:,.0f}원<br>전환 {conv:,.0f}</div>"
-                    )
+            def format_stat_block(label, cpa, cost, conv, text_color):
+                cpa_val = "∞" if cpa == np.inf or (isinstance(cpa, float) and np.isinf(cpa)) else f"{cpa:,.0f}"
+                return (
+                    f"<div style=\"line-height:1.6; color:{text_color};\">"
+                    f"<strong>{label}</strong><br>CPA <strong>{cpa_val}원</strong><br>"
+                    f"비용 {cost:,.0f}원<br>전환 {conv:,.0f}</div>"
+                )
 
-                cpa_t = r.get("CPA_today", 0) or 0
-                cost_t = r.get("Cost_today", 0) or 0
-                conv_t = r.get("Conversions_today", 0) or 0
-                t_color = inactive_color if is_inactive else "inherit"
-                with col0: st.markdown(format_stat_block("오늘", cpa_t, cost_t, conv_t, t_color), unsafe_allow_html=True)
-                with col1: st.markdown(format_stat_block("3일", r['CPA_3'], r['Cost_3'], r['Conversions_3'], t_color), unsafe_allow_html=True)
-                with col2: st.markdown(format_stat_block("7일", r['CPA_7'], r['Cost_7'], r['Conversions_7'], t_color), unsafe_allow_html=True)
-                with col3: st.markdown(format_stat_block("14일", r['CPA_14'], r['Cost_14'], r['Conversions_14'], t_color), unsafe_allow_html=True)
+            cpa_t = r.get("CPA_today", 0) or 0
+            cost_t = r.get("Cost_today", 0) or 0
+            conv_t = r.get("Conversions_today", 0) or 0
+            t_color = inactive_color if is_inactive else "inherit"
+            with col0: st.markdown(format_stat_block("오늘", cpa_t, cost_t, conv_t, t_color), unsafe_allow_html=True)
+            with col1: st.markdown(format_stat_block("3일", r['CPA_3'], r['Cost_3'], r['Conversions_3'], t_color), unsafe_allow_html=True)
+            with col2: st.markdown(format_stat_block("7일", r['CPA_7'], r['Cost_7'], r['Conversions_7'], t_color), unsafe_allow_html=True)
+            with col3: st.markdown(format_stat_block("14일", r['CPA_14'], r['Cost_14'], r['Conversions_14'], t_color), unsafe_allow_html=True)
 
-                with col4:
-                    t_col = "red" if r['Status_Color'] == "Red" else "blue" if r['Status_Color'] == "Blue" else "orange"
-                    title_style = f"color:{inactive_color};" if is_inactive else ""
-                    detail_style = f"color:{inactive_color};" if is_inactive else ""
-                    st.markdown(f"<div style='{title_style}'><strong>{r['Diag_Title']}</strong></div>", unsafe_allow_html=True)
-                    st.markdown(f"<div style='{detail_style} font-size: 0.85rem;'>{r['Diag_Detail']}</div>", unsafe_allow_html=True)
+            with col4:
+                t_col = "red" if r['Status_Color'] == "Red" else "blue" if r['Status_Color'] == "Blue" else "orange"
+                title_style = f"color:{inactive_color};" if is_inactive else ""
+                detail_style = f"color:{inactive_color};" if is_inactive else ""
+                st.markdown(f"<div style='{title_style}'><strong>{r['Diag_Title']}</strong></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='{detail_style} font-size: 0.85rem;'>{r['Diag_Detail']}</div>", unsafe_allow_html=True)
 
-                    unique_key = f"btn_{item['name']}_{r['Creative_ID']}_{idx}"
-                    if st.button("분석하기", key=unique_key):
-                        st.session_state['chart_target_creative'] = r['Creative_ID']
-                        st.session_state['chart_target_adgroup'] = r['AdGroup']
-                        st.rerun()
+                unique_key = f"btn_{item['name']}_{r['Creative_ID']}_{idx}"
+                if st.button("분석하기", key=unique_key):
+                    st.session_state['chart_target_creative'] = r['Creative_ID']
+                    st.session_state['chart_target_adgroup'] = r['AdGroup']
+                    st.rerun()
 
                 st.markdown("<hr style='margin: 5px 0; border: none; border-top: 1px solid #f0f2f6;'>", unsafe_allow_html=True)
 else:
