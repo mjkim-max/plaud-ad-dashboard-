@@ -7,13 +7,19 @@ try:
 except Exception:
     go = None
 import streamlit as st
+import traceback
 
-from services.data_loader import (
-    load_main_data,
-    load_google_demo_data,
-    diagnose_meta_no_data,
-    get_meta_token_info,
-)
+try:
+    from services.data_loader import (
+        load_main_data,
+        load_google_demo_data,
+        diagnose_meta_no_data,
+        get_meta_token_info,
+    )
+except Exception:
+    st.error("data_loader import failed")
+    st.code(traceback.format_exc())
+    st.stop()
 from services.diagnosis import run_diagnosis
 from services.action_store import load_actions, upsert_action, delete_action
 
@@ -520,6 +526,14 @@ if not diag_res.empty:
                 ctr_icon = _trend_icon(ctr_change)
                 ctr_pct = f"{ctr_change*100:,.0f}%" if ctr_change is not None else "-"
                 st.markdown(f"**CTR 추세 (3d vs 7d)**  \n{ctr_icon} {ctr_label} ({ctr_pct})")
+
+                cvr_7 = _safe(r.get("CVR_7"))
+                cvr_3 = _safe(r.get("CVR_3"))
+                cvr_change = _pct_change(cvr_7, cvr_3)
+                cvr_label = _trend_label(cvr_change)
+                cvr_icon = _trend_icon(cvr_change)
+                cvr_pct = f"{cvr_change*100:,.0f}%" if cvr_change is not None else "-"
+                st.markdown(f"**CVR 추세 (3d vs 7d)**  \n{cvr_icon} {cvr_label} ({cvr_pct})")
 
                 # 간단 규칙 기반 스토리
                 story = "데이터가 부족해 명확한 결론을 내리기 어렵습니다."
