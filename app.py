@@ -460,21 +460,77 @@ if not diag_res.empty:
                 st.markdown(f"<div style='{title_style}'><strong>{r['Diag_Title']}</strong></div>", unsafe_allow_html=True)
                 detail_txt = str(r.get("Diag_Detail", ""))
                 st.markdown(f"<div style='{detail_style} font-size: 0.85rem; margin-bottom: 6px;'>{detail_txt}</div>", unsafe_allow_html=True)
-
-                def _fmt(v, unit=""):
+                def _safe(v):
                     if v is None or v == np.inf or (isinstance(v, float) and np.isinf(v)):
-                        return "-"
-                    return f"{v:,.2f}{unit}"
+                        return None
+                    return float(v)
 
-                table_md = (
-                    "| 기간 | CPM | CTR | CVR |\n"
-                    "|---|---|---|---|\n"
-                    f"| 오늘 | {_fmt(r.get('CPM_today'))} | {_fmt(r.get('CTR_today'), '%')} | {_fmt(r.get('CVR_today'), '%')} |\n"
-                    f"| 3일 | {_fmt(r.get('CPM_3'))} | {_fmt(r.get('CTR_3'), '%')} | {_fmt(r.get('CVR_3'), '%')} |\n"
-                    f"| 7일 | {_fmt(r.get('CPM_7'))} | {_fmt(r.get('CTR_7'), '%')} | {_fmt(r.get('CVR_7'), '%')} |\n"
-                    f"| 14일 | {_fmt(r.get('CPM_14'))} | {_fmt(r.get('CTR_14'), '%')} | {_fmt(r.get('CVR_14'), '%')} |"
-                )
-                st.markdown(table_md)
+                def _pct_change(a, b):
+                    if a in (None, 0) or b is None:
+                        return None
+                    return (b - a) / a
+
+                def _trend_icon(v):
+                    if v is None:
+                        return "➖"
+                    if v > 0:
+                        return "📈"
+                    if v < 0:
+                        return "📉"
+                    return "➖"
+
+                def _trend_label(v):
+                    if v is None:
+                        return "보합"
+                    if v > 0:
+                        return "상승"
+                    if v < 0:
+                        return "하락"
+                    return "보합"
+
+                cpa_14 = _safe(r.get("CPA_14"))
+                cpa_7 = _safe(r.get("CPA_7"))
+                cpa_3 = _safe(r.get("CPA_3"))
+                cpa_flow = []
+                for v in (cpa_14, cpa_7, cpa_3):
+                    if v is None:
+                        cpa_flow.append("➖")
+                    else:
+                        cpa_flow.append("🟢")
+                # CPA 악화 판단: 14 < 7 < 3
+                cpa_worse = cpa_14 is not None and cpa_7 is not None and cpa_3 is not None and (cpa_14 < cpa_7 < cpa_3)
+                if cpa_worse:
+                    cpa_flow = ["🟢", "➡", "🟢", "➡", "🔴"]
+                else:
+                    cpa_flow = ["🟢", "➡", "🟡", "➡", "🟢"]
+                cpa_flow_text = "".join(cpa_flow)
+                st.markdown(f"**CPA 흐름 (14→7→3)**  \n{cpa_flow_text} ({'악화' if cpa_worse else '혼재'})")
+
+                cpm_14 = _safe(r.get("CPM_14"))
+                cpm_3 = _safe(r.get("CPM_3"))
+                cpm_change = _pct_change(cpm_14, cpm_3)
+                cpm_label = _trend_label(cpm_change)
+                cpm_icon = _trend_icon(cpm_change)
+                cpm_pct = f"{cpm_change*100:,.0f}%" if cpm_change is not None else "-"
+                st.markdown(f"**CPM 추세**  \n{cpm_icon} {cpm_label} ({cpm_pct})")
+
+                ctr_14 = _safe(r.get("CTR_14"))
+                ctr_3 = _safe(r.get("CTR_3"))
+                ctr_change = _pct_change(ctr_14, ctr_3)
+                ctr_label = _trend_label(ctr_change)
+                ctr_icon = _trend_icon(ctr_change)
+                ctr_pct = f"{ctr_change*100:,.0f}%" if ctr_change is not None else "-"
+                st.markdown(f"**CTR 추세**  \n{ctr_icon} {ctr_label} ({ctr_pct})")
+
+                # 간단 규칙 기반 스토리
+                story = "데이터가 부족해 명확한 결론을 내리기 어렵습니다."
+                if cpm_change is not None and ctr_change is not None:
+                    if cpm_change < 0 and ctr_change < 0:
+                        story = "CPM/CTR이 함께 내려가는 흐름입니다. 기존 타겟 소진 후 확장 구간일 가능성이 있어 2~3일 관망이 합리적입니다."
+                    elif cpm_change > 0 and ctr_change > 0:
+                        story = "CPM/CTR이 함께 상승합니다. 타겟 정교화 또는 학습 재수렴 신호일 수 있어 성과 지표와 함께 확인하세요."
+                st.markdown("**🤖 AI 분석 코멘트 (스토리)**")
+                st.caption(story)
                 unique_key = f"btn_{item['name']}_{r['Creative_ID']}_{idx}"
                 if st.button("분석하기", key=unique_key):
                     st.session_state['chart_target_creative'] = r['Creative_ID']
