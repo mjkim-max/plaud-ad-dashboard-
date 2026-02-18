@@ -455,7 +455,11 @@ if not diag_res.empty:
                 title_style = f"color:{inactive_color};" if is_inactive else ""
                 detail_style = f"color:{inactive_color};" if is_inactive else ""
                 st.markdown(f"<div style='{title_style}'><strong>{r['Diag_Title']}</strong></div>", unsafe_allow_html=True)
-                st.markdown(f"<div style='{detail_style} font-size: 0.85rem;'>{r['Diag_Detail']}</div>", unsafe_allow_html=True)
+                detail_txt = str(r.get("Diag_Detail", ""))
+                extra_txt = str(r.get("Diag_Extra", "")).replace("\n", "<br>")
+                st.markdown(f"<div style='{detail_style} font-size: 0.85rem;'>{detail_txt}</div>", unsafe_allow_html=True)
+                if extra_txt:
+                    st.markdown(f"<div style='{detail_style} font-size: 0.8rem; margin-top: 6px;'>{extra_txt}</div>", unsafe_allow_html=True)
                 unique_key = f"btn_{item['name']}_{r['Creative_ID']}_{idx}"
                 if st.button("분석하기", key=unique_key):
                     st.session_state['chart_target_creative'] = r['Creative_ID']
