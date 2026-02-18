@@ -106,15 +106,13 @@ def run_diagnosis(df, target_cpa):
 
     def _trend(prev, curr):
         if prev in (0, np.inf) or curr in (0, np.inf):
-            return "유지"
+            return "보합"
         delta = (curr - prev) / prev
         if delta >= CHANGE_STRONG:
             return "상승"
         if delta <= -CHANGE_STRONG:
             return "하락"
-        if abs(delta) <= CHANGE_WEAK:
-            return "유지"
-        return "약한 변화"
+        return "보합"
 
     results = []
     for _, row in m.iterrows():

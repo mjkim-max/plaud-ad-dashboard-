@@ -461,34 +461,20 @@ if not diag_res.empty:
                 detail_txt = str(r.get("Diag_Detail", ""))
                 st.markdown(f"<div style='{detail_style} font-size: 0.85rem; margin-bottom: 6px;'>{detail_txt}</div>", unsafe_allow_html=True)
 
-                def _trend_emoji(t: str) -> str:
-                    if t == "상승":
-                        return "📈"
-                    if t == "하락":
-                        return "📉"
-                    if t == "유지":
-                        return "➖"
-                    return "➗"
-
-                t_cpa_14_7 = str(r.get("Trend_CPA_14_7", ""))
-                t_cpa_7_3 = str(r.get("Trend_CPA_7_3", ""))
-                t_cpm_14_7 = str(r.get("Trend_CPM_14_7", ""))
-                t_cpm_7_3 = str(r.get("Trend_CPM_7_3", ""))
-                t_ctr_14_7 = str(r.get("Trend_CTR_14_7", ""))
-                t_ctr_7_3 = str(r.get("Trend_CTR_7_3", ""))
-                t_cvr_14_7 = str(r.get("Trend_CVR_14_7", ""))
-                t_cvr_7_3 = str(r.get("Trend_CVR_7_3", ""))
+                def _fmt(v, unit=""):
+                    if v is None or v == np.inf or (isinstance(v, float) and np.isinf(v)):
+                        return "-"
+                    return f"{v:,.2f}{unit}"
 
                 table_md = (
-                    "| 지표 | 14→7 | 7→3 |\n"
-                    "|---|---|---|\n"
-                    f"| CPA | {_trend_emoji(t_cpa_14_7)} {t_cpa_14_7} | {_trend_emoji(t_cpa_7_3)} {t_cpa_7_3} |\n"
-                    f"| CPM | {_trend_emoji(t_cpm_14_7)} {t_cpm_14_7} | {_trend_emoji(t_cpm_7_3)} {t_cpm_7_3} |\n"
-                    f"| CTR | {_trend_emoji(t_ctr_14_7)} {t_ctr_14_7} | {_trend_emoji(t_ctr_7_3)} {t_ctr_7_3} |\n"
-                    f"| CVR | {_trend_emoji(t_cvr_14_7)} {t_cvr_14_7} | {_trend_emoji(t_cvr_7_3)} {t_cvr_7_3} |"
+                    "| 기간 | CPM | CTR | CVR |\n"
+                    "|---|---|---|---|\n"
+                    f"| 오늘 | {_fmt(r.get('CPM_today'))} | {_fmt(r.get('CTR_today'), '%')} | {_fmt(r.get('CVR_today'), '%')} |\n"
+                    f"| 3일 | {_fmt(r.get('CPM_3'))} | {_fmt(r.get('CTR_3'), '%')} | {_fmt(r.get('CVR_3'), '%')} |\n"
+                    f"| 7일 | {_fmt(r.get('CPM_7'))} | {_fmt(r.get('CTR_7'), '%')} | {_fmt(r.get('CVR_7'), '%')} |\n"
+                    f"| 14일 | {_fmt(r.get('CPM_14'))} | {_fmt(r.get('CTR_14'), '%')} | {_fmt(r.get('CVR_14'), '%')} |"
                 )
                 st.markdown(table_md)
-                st.caption("기준: 상승/하락 ±15%, 유지 ±10%")
                 unique_key = f"btn_{item['name']}_{r['Creative_ID']}_{idx}"
                 if st.button("분석하기", key=unique_key):
                     st.session_state['chart_target_creative'] = r['Creative_ID']
