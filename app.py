@@ -691,16 +691,15 @@ if not trend_df.empty and metrics:
                 xaxis=dict(title="전환수", zeroline=True, zerolinewidth=1, zerolinecolor="#999", tickformat=","),
                 yaxis=dict(title="연령", categoryorder="category ascending")
             )
-            st.plotly_chart(fig_conv, use_container_width=True)
-
-            c1, c2 = st.columns(2)
-            with c1:
+            left, right = st.columns([1, 1])
+            with left:
+                st.plotly_chart(fig_conv, use_container_width=True)
+            with right:
                 st.markdown("**CPA**")
                 st.dataframe(
                     demog_agg.pivot_table(index='Gender', columns='Age', values='CPA', aggfunc='sum', fill_value=0).style.format("{:,.0f}"),
                     use_container_width=True
                 )
-            with c2:
                 st.markdown("**비용**")
                 st.dataframe(
                     demog_agg.pivot_table(index='Gender', columns='Age', values='Cost', aggfunc='sum', fill_value=0).style.format("{:,.0f}"),
