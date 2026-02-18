@@ -313,6 +313,10 @@ def diagnose_meta_no_data() -> str:
         )
     except Exception as e:
         err = _redact(str(e).strip())
+        try:
+            st.session_state["meta_api_error"] = err[:300]
+        except Exception:
+            pass
         if "401" in err or "Unauthorized" in err or "access token" in err.lower():
             return "토큰이 만료되었거나 권한이 없습니다. Graph API Explorer에서 새 토큰을 발급하고 **ads_read** 권한을 체크하세요."
         if "400" in err or "Bad Request" in err:
