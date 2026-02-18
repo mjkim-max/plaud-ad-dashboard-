@@ -157,6 +157,14 @@ def run_diagnosis(df, target_cpa):
         row['Diag_Title'] = title
         row['Diag_Detail'] = detail
         row['Diag_Extra'] = detail_extra
+        row['Trend_CPA_14_7'] = cpa_14_7
+        row['Trend_CPA_7_3'] = cpa_7_3
+        row['Trend_CPM_14_7'] = cpm_14_7
+        row['Trend_CPM_7_3'] = cpm_7_3
+        row['Trend_CTR_14_7'] = ctr_14_7
+        row['Trend_CTR_7_3'] = ctr_7_3
+        row['Trend_CVR_14_7'] = cvr_14_7
+        row['Trend_CVR_7_3'] = cvr_7_3
         results.append(row)
 
     return pd.DataFrame(results)
