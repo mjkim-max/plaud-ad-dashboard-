@@ -491,36 +491,35 @@ if not diag_res.empty:
                 cpa_14 = _safe(r.get("CPA_14"))
                 cpa_7 = _safe(r.get("CPA_7"))
                 cpa_3 = _safe(r.get("CPA_3"))
-                cpa_flow = []
-                for v in (cpa_14, cpa_7, cpa_3):
-                    if v is None:
-                        cpa_flow.append("➖")
-                    else:
-                        cpa_flow.append("🟢")
-                # CPA 악화 판단: 14 < 7 < 3
-                cpa_worse = cpa_14 is not None and cpa_7 is not None and cpa_3 is not None and (cpa_14 < cpa_7 < cpa_3)
-                if cpa_worse:
-                    cpa_flow = ["🟢", "➡", "🟢", "➡", "🔴"]
-                else:
-                    cpa_flow = ["🟢", "➡", "🟡", "➡", "🟢"]
-                cpa_flow_text = "".join(cpa_flow)
-                st.markdown(f"**CPA 흐름 (14→7→3)**  \n{cpa_flow_text} ({'악화' if cpa_worse else '혼재'})")
 
-                cpm_14 = _safe(r.get("CPM_14"))
+                def _cpa_dot(v):
+                    if v is None:
+                        return "⚪"
+                    if v <= 80000:
+                        return "🔵"
+                    if v >= 120000:
+                        return "🔴"
+                    return "⚪"
+
+                cpa_flow_text = f"{_cpa_dot(cpa_14)}➡{_cpa_dot(cpa_7)}➡{_cpa_dot(cpa_3)}"
+                st.markdown("**CPA 흐름 (14→7→3)**")
+                st.markdown(cpa_flow_text)
+
+                cpm_7 = _safe(r.get("CPM_7"))
                 cpm_3 = _safe(r.get("CPM_3"))
-                cpm_change = _pct_change(cpm_14, cpm_3)
+                cpm_change = _pct_change(cpm_7, cpm_3)
                 cpm_label = _trend_label(cpm_change)
                 cpm_icon = _trend_icon(cpm_change)
                 cpm_pct = f"{cpm_change*100:,.0f}%" if cpm_change is not None else "-"
-                st.markdown(f"**CPM 추세**  \n{cpm_icon} {cpm_label} ({cpm_pct})")
+                st.markdown(f"**CPM 추세 (3d vs 7d)**  \n{cpm_icon} {cpm_label} ({cpm_pct})")
 
-                ctr_14 = _safe(r.get("CTR_14"))
+                ctr_7 = _safe(r.get("CTR_7"))
                 ctr_3 = _safe(r.get("CTR_3"))
-                ctr_change = _pct_change(ctr_14, ctr_3)
+                ctr_change = _pct_change(ctr_7, ctr_3)
                 ctr_label = _trend_label(ctr_change)
                 ctr_icon = _trend_icon(ctr_change)
                 ctr_pct = f"{ctr_change*100:,.0f}%" if ctr_change is not None else "-"
-                st.markdown(f"**CTR 추세**  \n{ctr_icon} {ctr_label} ({ctr_pct})")
+                st.markdown(f"**CTR 추세 (3d vs 7d)**  \n{ctr_icon} {ctr_label} ({ctr_pct})")
 
                 # 간단 규칙 기반 스토리
                 story = "데이터가 부족해 명확한 결론을 내리기 어렵습니다."
