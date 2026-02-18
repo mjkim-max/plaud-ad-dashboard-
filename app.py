@@ -113,6 +113,9 @@ if "Meta" in sel_pl and meta_row_count == 0:
     st.sidebar.error("**Meta 데이터 없음**")
     st.sidebar.caption(reason)
     st.sidebar.caption("💡 .env를 수정했다면 **Streamlit 중지 후 다시 실행**해야 반영됩니다.")
+    err = st.session_state.get("meta_api_error")
+    if err:
+        st.sidebar.error(err)
 elif meta_row_count > 0:
     st.sidebar.caption(f"📊 Meta {meta_row_count:,}건 / Google {google_row_count:,}건 로드")
 

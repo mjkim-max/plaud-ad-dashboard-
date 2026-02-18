@@ -137,7 +137,11 @@ def load_meta_from_api(since: str, until: str):
                 META_AD_ACCOUNT_ID, since=since, until=until, level="ad", use_breakdowns=False
             )
             use_breakdowns = False
-        except Exception:
+        except Exception as e:
+            try:
+                st.session_state["meta_api_error"] = str(e)[:300]
+            except Exception:
+                pass
             return pd.DataFrame()
 
     if not raw:
