@@ -679,13 +679,17 @@ if not trend_df.empty and metrics:
             st.markdown(f"#### {title_txt}")
 
             fig_conv = go.Figure()
-            fig_conv.add_trace(go.Bar(x=male_data['Age'], y=male_data['Conversions'], name='남성', marker_color='#9EB9F3'))
-            fig_conv.add_trace(go.Bar(x=female_data['Age'], y=female_data['Conversions'], name='여성', marker_color='#F8C8C8'))
+            male_y = -male_data['Conversions']
+            female_y = female_data['Conversions']
+            fig_conv.add_trace(go.Bar(y=male_data['Age'], x=male_y, name='남성', orientation='h', marker_color='#9EB9F3'))
+            fig_conv.add_trace(go.Bar(y=female_data['Age'], x=female_y, name='여성', orientation='h', marker_color='#F8C8C8'))
             fig_conv.update_layout(
-                barmode='group',
-                height=350,
+                barmode='overlay',
+                height=380,
                 margin=dict(l=20, r=20, t=20, b=20),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                xaxis=dict(title="전환수", zeroline=True, zerolinewidth=1, zerolinecolor="#999", tickformat=","),
+                yaxis=dict(title="연령", categoryorder="category ascending")
             )
             st.plotly_chart(fig_conv, use_container_width=True)
 
