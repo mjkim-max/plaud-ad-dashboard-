@@ -305,7 +305,7 @@ def diagnose_meta_no_data() -> str:
         return "**meta_api** 모듈을 찾을 수 없습니다. (meta_api.py가 app.py와 같은 폴더에 있는지 확인)"
 
     today = datetime.now().date()
-    since = (today - timedelta(days=7)).isoformat()
+    since = (today - timedelta(days=14)).isoformat()
     until = today.isoformat()
     try:
         raw = fetch_insights(
@@ -328,7 +328,7 @@ def diagnose_meta_no_data() -> str:
         return f"API 오류: {err[:250]}"
 
     if not raw:
-        return "최근 7일 동안 해당 광고계정에 인사이트 데이터가 없습니다. (계정 ID·기간·실제 광고 집행 여부 확인)"
+        return "최근 14일 동안 해당 광고계정에 인사이트 데이터가 없습니다. (계정 ID·기간·실제 광고 집행 여부 확인)"
 
     return "원인을 특정하지 못했습니다. 터미널 로그를 확인해 보세요."
 
@@ -352,11 +352,11 @@ def load_main_data():
         'Gender': 'Gender', 'Age': 'Age'
     }
 
-    # Meta/Google: API에서 로드 (초기엔 7일만)
+    # Meta/Google: API에서 로드 (초기엔 14일만)
     meta_fetched_at = None
     google_fetched_at = None
     today = datetime.now().date()
-    base_since = (today - timedelta(days=7)).isoformat()
+    base_since = (today - timedelta(days=14)).isoformat()
     base_until = today.isoformat()
     try:
         df_meta = load_meta_from_api(since=base_since, until=base_until)
