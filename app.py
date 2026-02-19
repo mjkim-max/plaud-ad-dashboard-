@@ -401,7 +401,7 @@ if not diag_res.empty:
                         label = f"{icon}\n{d.strftime('%m/%d')}"
                         with col:
                             st.markdown("<div class='tl-cell'>", unsafe_allow_html=True)
-                            if st.button(label, key=f"tl_{cid}_{d_str}", on_click=_set_selected_date, args=(cid, d_str)):
+                            if st.button(label, key=f"tl_{cid}_{d_str}_{idx}", on_click=_set_selected_date, args=(cid, d_str)):
                                 pass
                             st.markdown("</div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
