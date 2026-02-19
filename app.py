@@ -319,12 +319,8 @@ if not diag_res.empty:
             for idx, (_, r) in enumerate(item['data'].iterrows()):
                 creative_raw = str(r.get("Creative_ID", "")).strip()
                 if creative_raw.lower() in ("", "nan", "none"):
-                    fallback = " / ".join([
-                        str(r.get("Campaign", "")).strip(),
-                        str(r.get("AdGroup", "")).strip()
-                    ]).strip(" /")
-                    creative_label = fallback if fallback else "(소재명 없음)"
-                    creative_id = creative_label
+                    creative_label = ""
+                    creative_id = ""
                 else:
                     creative_label = creative_raw
                     creative_id = creative_raw
@@ -557,7 +553,7 @@ if not diag_res.empty:
                 st.caption(story)
                 unique_key = f"btn_{item['name']}_{r['Creative_ID']}_{idx}"
                 if st.button("분석하기", key=unique_key):
-                    st.session_state['chart_target_creative'] = r['Creative_ID']
+                    st.session_state['chart_target_creative'] = str(r.get('Creative_ID', ''))
                     st.session_state['chart_target_adgroup'] = r['AdGroup']
                     st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
@@ -580,9 +576,11 @@ demog_df = pd.DataFrame()
 is_specific = False
 
 if target_creative:
-    trend_df = target_df[target_df['Creative_ID'] == target_creative]
+    if 'Creative_ID' in trend_df.columns:
+        trend_df['Creative_ID'] = trend_df['Creative_ID'].astype(str)
+    trend_df = trend_df[trend_df['Creative_ID'] == str(target_creative)]
 
-    sel_row = target_df[target_df['Creative_ID'] == target_creative]
+    sel_row = trend_df
     if not sel_row.empty:
         platform = sel_row['Platform'].iloc[0]
         current_adgroup = target_adgroup if target_adgroup else sel_row['AdGroup'].iloc[0]
@@ -602,6 +600,14 @@ if target_creative:
             st.info(f"🔎 현재 **'{target_creative}'** 소재를 집중 분석 중입니다.")
 
     is_specific = True
+
+    # 날짜 필터로 인해 비어있는 경우, 전체 데이터에서 재시도
+    if trend_df.empty and not df_raw.empty and "Creative_ID" in df_raw.columns:
+        full_df = df_raw.copy()
+        full_df['Creative_ID'] = full_df['Creative_ID'].astype(str)
+        trend_df = full_df[full_df['Creative_ID'] == str(target_creative)]
+        if not trend_df.empty:
+            st.warning("선택한 날짜 범위에 데이터가 없어, 전체 기간 데이터를 표시합니다.")
 
     if st.button("전체 목록으로 차트 초기화"):
         st.session_state['chart_target_creative'] = None
