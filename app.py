@@ -406,6 +406,8 @@ if not diag_res.empty:
                         elif act == "종료":
                             icon = "🟥"
                         label = f"{icon}\n{d.strftime('%m/%d')}"
+                        if d_str == selected_date:
+                            label = f"◎{label}"
                         with col:
                             st.markdown("<div class='tl-cell'>", unsafe_allow_html=True)
                             key_id = f"tl_{item['name']}_{r['AdGroup']}_{cid}_{d_str}_{idx}"
@@ -446,24 +448,32 @@ if not diag_res.empty:
 
                     if do_delete:
                         if selected_date:
-                            delete_action(action_date=selected_date, creative_id=cid)
-                            st.rerun()
+                            try:
+                                delete_action(action_date=selected_date, creative_id=cid)
+                                st.success("삭제 완료")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"삭제 실패: {e}")
                         else:
                             st.info("날짜를 먼저 선택하세요.")
                     if submitted:
                         if not selected_date:
                             st.info("날짜를 먼저 선택하세요.")
                         else:
-                            upsert_action(
-                                action_date=selected_date,
-                                creative_id=cid,
-                                campaign=str(r.get("Campaign", "")),
-                                adgroup=str(r.get("AdGroup", "")),
-                                action=action,
-                                note=note,
-                                author="",
-                            )
-                            st.rerun()
+                            try:
+                                upsert_action(
+                                    action_date=selected_date,
+                                    creative_id=cid,
+                                    campaign=str(r.get("Campaign", "")),
+                                    adgroup=str(r.get("AdGroup", "")),
+                                    action=action,
+                                    note=note,
+                                    author="",
+                                )
+                                st.success("저장 완료")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"저장 실패: {e}")
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
 
