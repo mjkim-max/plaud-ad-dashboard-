@@ -72,8 +72,24 @@ def _set_selected_date(cid: str, d_str: str) -> None:
 # -----------------------------------------------------------------------------
 # 3. 사이드바 & 데이터 준비
 # -----------------------------------------------------------------------------
-df_raw, meta_fetched_at, google_fetched_at = load_main_data()
-df_google_demo_raw = load_google_demo_data()
+if "data_cache" not in st.session_state:
+    st.session_state["data_cache"] = {}
+if "data_loaded_at" not in st.session_state:
+    st.session_state["data_loaded_at"] = None
+
+if st.session_state["data_cache"].get("df_raw") is None:
+    df_raw, meta_fetched_at, google_fetched_at = load_main_data()
+    df_google_demo_raw = load_google_demo_data()
+    st.session_state["data_cache"]["df_raw"] = df_raw
+    st.session_state["data_cache"]["df_google_demo_raw"] = df_google_demo_raw
+    st.session_state["data_cache"]["meta_fetched_at"] = meta_fetched_at
+    st.session_state["data_cache"]["google_fetched_at"] = google_fetched_at
+    st.session_state["data_loaded_at"] = datetime.now()
+else:
+    df_raw = st.session_state["data_cache"]["df_raw"]
+    df_google_demo_raw = st.session_state["data_cache"]["df_google_demo_raw"]
+    meta_fetched_at = st.session_state["data_cache"]["meta_fetched_at"]
+    google_fetched_at = st.session_state["data_cache"]["google_fetched_at"]
 
 # Meta 로드 건수 (필터 적용 전 기준, 진단/표시용)
 meta_row_count = int((df_raw["Platform"] == "Meta").sum()) if (not df_raw.empty and "Platform" in df_raw.columns) else 0
@@ -118,6 +134,8 @@ if 'Platform' in df_raw.columns:
 # 데이터 업데이트 버튼
 if st.sidebar.button("데이터 업데이트"):
     st.cache_data.clear()
+    st.session_state["data_cache"] = {}
+    st.session_state["data_loaded_at"] = None
     st.rerun()
 
 # 데이터 로드 상태 (Meta가 선택됐는데 0건이면 원인 진단 후 안내)
@@ -317,6 +335,11 @@ if not diag_res.empty:
 
             st.markdown("<div class='sec-divider'></div>", unsafe_allow_html=True)
             st.markdown("##### 소재별 진단")
+
+            # 성능 최적화: 선택된 캠페인만 상세 렌더 (전체일 땐 접기)
+            if sel_camp == '전체':
+                st.caption("캠페인 필터를 선택하면 소재별 진단을 로딩합니다.")
+                continue
 
             for idx, (_, r) in enumerate(item['data'].iterrows()):
                 creative_raw = str(r.get("Creative_ID", "")).strip()
