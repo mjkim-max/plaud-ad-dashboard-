@@ -401,7 +401,7 @@ if not diag_res.empty:
 
             action_by_date = {}
             for _, ar in ad_actions.iterrows():
-                action_by_date[str(ar["action_date"])] = str(ar["action"])
+                action_by_date[str(ar["action_date"])] = str(ar["action"]).strip()
 
             # 3컬럼: 좌/중/우 + 중간 여백
             tl_left, gap1, tl_mid, gap2, tl_right = st.columns([3, 0.4, 3, 0.4, 3])
@@ -426,7 +426,7 @@ if not diag_res.empty:
                             col.markdown("<div class='tl-note'></div>", unsafe_allow_html=True)
                             continue
                         d = datetime.fromisoformat(d_str).date()
-                        act = action_by_date.get(d_str, "")
+                        act = action_by_date.get(d_str, "").strip()
                         icon = "⬜"
                         if act == "증액":
                             icon = "🟦"
