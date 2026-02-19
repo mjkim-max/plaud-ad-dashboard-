@@ -1,6 +1,7 @@
 import os
 import json
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import pandas as pd
@@ -362,7 +363,7 @@ def load_main_data():
         df_meta = load_meta_from_api(since=base_since, until=base_until)
         if not df_meta.empty:
             dfs.append(df_meta)
-            meta_fetched_at = datetime.now()
+            meta_fetched_at = datetime.now(ZoneInfo("Asia/Seoul"))
     except Exception:
         pass
 
@@ -371,7 +372,7 @@ def load_main_data():
         df_google_api = load_google_from_api(since=base_since, until=base_until)
         if not df_google_api.empty:
             dfs.append(df_google_api)
-            google_fetched_at = datetime.now()
+            google_fetched_at = datetime.now(ZoneInfo("Asia/Seoul"))
     except Exception:
         pass
 
