@@ -113,6 +113,11 @@ if c_g.checkbox("Google", True): sel_pl.append("Google")
 if 'Platform' in df_raw.columns:
     df_raw = df_raw[df_raw['Platform'].isin(sel_pl)]
 
+# 데이터 업데이트 버튼
+if st.sidebar.button("데이터 업데이트"):
+    st.cache_data.clear()
+    st.rerun()
+
 # 데이터 로드 상태 (Meta가 선택됐는데 0건이면 원인 진단 후 안내)
 if "Meta" in sel_pl and meta_row_count == 0:
     reason = diagnose_meta_no_data()
@@ -133,13 +138,6 @@ if "Meta" in sel_pl:
         st.sidebar.caption("Meta 데이터 반영시점")
         st.sidebar.caption("데이터 없음")
 
-    if st.sidebar.checkbox("디버그: 토큰 상태"):
-        info = get_meta_token_info()
-        st.sidebar.caption(f"토큰 소스: {info['source']}")
-        st.sidebar.caption(f"토큰 길이: {info['length']}")
-        st.sidebar.caption(f"secrets 키: {', '.join(info['keys']) if info['keys'] else '-'}")
-        if info.get("error"):
-            st.sidebar.caption(f"secrets 오류: {info['error']}")
 
 if "Google" in sel_pl:
     if google_fetched_at:
