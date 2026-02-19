@@ -317,16 +317,27 @@ if not diag_res.empty:
             st.markdown("##### 소재별 진단")
 
             for idx, (_, r) in enumerate(item['data'].iterrows()):
+                creative_raw = str(r.get("Creative_ID", "")).strip()
+                if creative_raw.lower() in ("", "nan", "none"):
+                    fallback = " / ".join([
+                        str(r.get("Campaign", "")).strip(),
+                        str(r.get("AdGroup", "")).strip()
+                    ]).strip(" /")
+                    creative_label = fallback if fallback else "(소재명 없음)"
+                    creative_id = creative_label
+                else:
+                    creative_label = creative_raw
+                    creative_id = creative_raw
                 is_inactive = False
                 if "Status" in r:
                     is_inactive = not _is_active_status(r.get("Status"))
                 inactive_color = "#9aa0a6"
                 title_color = inactive_color if is_inactive else "inherit"
-            st.markdown(
-                f"<div style='color:{title_color}; font-size: 1.1rem; font-weight: 600;'>"
-                f"{r['Creative_ID']}</div>",
-                unsafe_allow_html=True,
-            )
+                st.markdown(
+                    f"<div style='color:{title_color}; font-size: 1.1rem; font-weight: 600;'>"
+                    f"{creative_label}</div>",
+                    unsafe_allow_html=True,
+                )
 
             col0, col1, col2, col3 = st.columns([1, 1, 1, 1])
 
@@ -351,7 +362,7 @@ if not diag_res.empty:
             today = datetime.now().date()
             start = today - timedelta(days=13)
             dates = [start + timedelta(days=i) for i in range(14)]
-            cid = str(r["Creative_ID"])
+            cid = creative_id
             if cid not in st.session_state["action_selected"]:
                 _set_selected_date(cid, today.isoformat())
             selected_date = st.session_state["action_selected"].get(cid, "")
