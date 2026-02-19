@@ -247,8 +247,12 @@ if run_report:
                 df_day = df_day[df_day["Date"].dt.date == report_date]
             df_day = df_day[df_day["Cost"] >= 1] if "Cost" in df_day.columns else df_day
             valid_creatives = set(df_day["Creative_ID"].astype(str).tolist()) if "Creative_ID" in df_day.columns else set()
+            valid_keys = set((df_day["Campaign"].astype(str) + "|" + df_day["AdGroup"].astype(str)).tolist()) if "Campaign" in df_day.columns and "AdGroup" in df_day.columns else set()
 
-            filtered = actions_day[actions_day["creative_id"].astype(str).isin(valid_creatives)]
+            filtered = actions_day[
+                (actions_day["creative_id"].astype(str).isin(valid_creatives)) |
+                (actions_day["creative_key"].astype(str).isin(valid_keys))
+            ]
             if filtered.empty:
                 st.info("선택한 날짜에 Spend 1 이상인 소재의 조치 내용이 없습니다.")
             else:
@@ -355,6 +359,9 @@ if not diag_res.empty:
                 else:
                     creative_label = creative_raw
                     creative_id = creative_raw
+                campaign_name = str(r.get("Campaign", "")).strip()
+                adgroup_name = str(r.get("AdGroup", "")).strip()
+                creative_key = creative_id if creative_id else f"{campaign_name}|{adgroup_name}"
                 is_inactive = False
                 if "Status" in r:
                     is_inactive = not _is_active_status(r.get("Status"))
@@ -389,13 +396,13 @@ if not diag_res.empty:
             today = datetime.now().date()
             start = today - timedelta(days=13)
             dates = [start + timedelta(days=i) for i in range(14)]
-            cid = creative_id
+            cid = creative_key
             if cid not in st.session_state["action_selected"]:
                 _set_selected_date(cid, today.isoformat())
             selected_date = st.session_state["action_selected"].get(cid, "")
 
             if not actions_df.empty:
-                ad_actions = actions_df[actions_df["creative_id"] == cid]
+                ad_actions = actions_df[actions_df["creative_key"] == cid]
             else:
                 ad_actions = pd.DataFrame(columns=actions_df.columns)
 
@@ -477,7 +484,7 @@ if not diag_res.empty:
                     if do_delete:
                         if selected_date:
                             try:
-                                delete_action(action_date=selected_date, creative_id=cid)
+                                delete_action(action_date=selected_date, creative_key=cid)
                                 st.success("삭제 완료")
                                 st.rerun()
                             except Exception as e:
@@ -491,7 +498,8 @@ if not diag_res.empty:
                             try:
                                 upsert_action(
                                     action_date=selected_date,
-                                    creative_id=cid,
+                                    creative_id=creative_id,
+                                    creative_key=cid,
                                     campaign=str(r.get("Campaign", "")),
                                     adgroup=str(r.get("AdGroup", "")),
                                     action=action,

@@ -9,6 +9,7 @@ import pandas as pd
 _COLUMNS = [
     "action_date",
     "creative_id",
+    "creative_key",
     "campaign",
     "adgroup",
     "action",
@@ -39,6 +40,7 @@ def upsert_action(
     *,
     action_date: str,
     creative_id: str,
+    creative_key: str,
     campaign: str,
     adgroup: str,
     action: str,
@@ -46,10 +48,11 @@ def upsert_action(
     author: str,
 ) -> None:
     df = load_actions()
-    mask = (df["action_date"] == action_date) & (df["creative_id"] == creative_id)
+    mask = (df["action_date"] == action_date) & (df["creative_key"] == creative_key)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if mask.any():
-        df.loc[mask, ["campaign", "adgroup", "action", "note", "author", "updated_at"]] = [
+        df.loc[mask, ["creative_id", "campaign", "adgroup", "action", "note", "author", "updated_at"]] = [
+            creative_id,
             campaign,
             adgroup,
             action,
@@ -66,6 +69,7 @@ def upsert_action(
                         {
                             "action_date": action_date,
                             "creative_id": creative_id,
+                            "creative_key": creative_key,
                             "campaign": campaign,
                             "adgroup": adgroup,
                             "action": action,
@@ -81,8 +85,8 @@ def upsert_action(
     df.to_csv(_store_path(), index=False)
 
 
-def delete_action(*, action_date: str, creative_id: str) -> None:
+def delete_action(*, action_date: str, creative_key: str) -> None:
     df = load_actions()
-    mask = (df["action_date"] == action_date) & (df["creative_id"] == creative_id)
+    mask = (df["action_date"] == action_date) & (df["creative_key"] == creative_key)
     df = df[~mask]
     df.to_csv(_store_path(), index=False)
