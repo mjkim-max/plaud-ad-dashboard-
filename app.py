@@ -422,7 +422,8 @@ if not diag_res.empty:
                     existing_action = ""
                     existing_note = ""
 
-                with st.form(key=f"act_form_{cid}_{selected_date or 'none'}"):
+                form_key = f"act_form_{item['name']}_{r['AdGroup']}_{cid}_{selected_date or 'none'}_{idx}"
+                with st.form(key=form_key):
                     action = st.selectbox(
                         "구분",
                         ["증액", "보류", "종료", "유지"],
