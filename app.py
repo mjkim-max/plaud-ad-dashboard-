@@ -60,6 +60,8 @@ if "action_mode" not in st.session_state:
     st.session_state["action_mode"] = ""
 if "action_selected" not in st.session_state:
     st.session_state["action_selected"] = {}
+if "camp_loaded" not in st.session_state:
+    st.session_state["camp_loaded"] = {}
 
 
 def _set_selected_date(cid: str, d_str: str) -> None:
@@ -336,10 +338,17 @@ if not diag_res.empty:
             st.markdown("<div class='sec-divider'></div>", unsafe_allow_html=True)
             st.markdown("##### 소재별 진단")
 
-            # 성능 최적화: 선택된 캠페인만 상세 렌더 (전체일 땐 접기)
             if sel_camp == '전체':
                 st.caption("캠페인 필터를 선택하면 소재별 진단을 로딩합니다.")
                 continue
+
+            if not st.session_state["camp_loaded"].get(item['name']):
+                if st.button("소재별 진단 로드", key=f"load_camp_{item['name']}"):
+                    st.session_state["camp_loaded"][item['name']] = True
+                    st.rerun()
+                else:
+                    st.caption("로딩 버튼을 누르면 해당 캠페인 소재별 진단이 표시됩니다.")
+                    continue
 
             for idx, (_, r) in enumerate(item['data'].iterrows()):
                 creative_raw = str(r.get("Creative_ID", "")).strip()
