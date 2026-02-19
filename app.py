@@ -338,10 +338,6 @@ if not diag_res.empty:
             st.markdown("<div class='sec-divider'></div>", unsafe_allow_html=True)
             st.markdown("##### 소재별 진단")
 
-            if sel_camp == '전체':
-                st.caption("캠페인 필터를 선택하면 소재별 진단을 로딩합니다.")
-                continue
-
             if not st.session_state["camp_loaded"].get(item['name']):
                 if st.button("소재별 진단 로드", key=f"load_camp_{item['name']}"):
                     st.session_state["camp_loaded"][item['name']] = True
