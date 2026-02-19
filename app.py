@@ -54,6 +54,8 @@ if 'chart_target_creative' not in st.session_state:
     st.session_state['chart_target_creative'] = None
 if 'chart_target_adgroup' not in st.session_state:
     st.session_state['chart_target_adgroup'] = None
+if 'chart_target_campaign' not in st.session_state:
+    st.session_state['chart_target_campaign'] = None
 if "action_mode" not in st.session_state:
     st.session_state["action_mode"] = ""
 if "action_selected" not in st.session_state:
@@ -555,6 +557,7 @@ if not diag_res.empty:
                 if st.button("분석하기", key=unique_key):
                     st.session_state['chart_target_creative'] = str(r.get('Creative_ID', ''))
                     st.session_state['chart_target_adgroup'] = r['AdGroup']
+                    st.session_state['chart_target_campaign'] = r['Campaign']
                     st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -570,17 +573,28 @@ st.subheader("2. 지표별 추세 및 상세 분석")
 
 target_creative = st.session_state['chart_target_creative']
 target_adgroup = st.session_state['chart_target_adgroup']
+target_campaign = st.session_state['chart_target_campaign']
 
 trend_df = target_df.copy()
 demog_df = pd.DataFrame()
 is_specific = False
 
-if target_creative:
+if target_creative is not None and target_creative != "":
     if 'Creative_ID' in trend_df.columns:
         trend_df['Creative_ID'] = trend_df['Creative_ID'].astype(str)
     trend_df = trend_df[trend_df['Creative_ID'] == str(target_creative)]
-
     sel_row = trend_df
+else:
+    # Creative_ID가 비어있는 경우, 광고그룹+캠페인 기준으로 선택
+    if target_adgroup or target_campaign:
+        sel_row = trend_df
+        if target_adgroup:
+            sel_row = sel_row[sel_row['AdGroup'] == target_adgroup]
+        if target_campaign:
+            sel_row = sel_row[sel_row['Campaign'] == target_campaign]
+        trend_df = sel_row
+    else:
+        sel_row = pd.DataFrame()
     if not sel_row.empty:
         platform = sel_row['Platform'].iloc[0]
         current_adgroup = target_adgroup if target_adgroup else sel_row['AdGroup'].iloc[0]
@@ -602,16 +616,25 @@ if target_creative:
     is_specific = True
 
     # 날짜 필터로 인해 비어있는 경우, 전체 데이터에서 재시도
-    if trend_df.empty and not df_raw.empty and "Creative_ID" in df_raw.columns:
+    if trend_df.empty and not df_raw.empty:
         full_df = df_raw.copy()
-        full_df['Creative_ID'] = full_df['Creative_ID'].astype(str)
-        trend_df = full_df[full_df['Creative_ID'] == str(target_creative)]
+        if target_creative:
+            if "Creative_ID" in full_df.columns:
+                full_df['Creative_ID'] = full_df['Creative_ID'].astype(str)
+            trend_df = full_df[full_df['Creative_ID'] == str(target_creative)]
+        else:
+            if target_adgroup:
+                full_df = full_df[full_df['AdGroup'] == target_adgroup]
+            if target_campaign:
+                full_df = full_df[full_df['Campaign'] == target_campaign]
+            trend_df = full_df
         if not trend_df.empty:
             st.warning("선택한 날짜 범위에 데이터가 없어, 전체 기간 데이터를 표시합니다.")
 
     if st.button("전체 목록으로 차트 초기화"):
         st.session_state['chart_target_creative'] = None
         st.session_state['chart_target_adgroup'] = None
+        st.session_state['chart_target_campaign'] = None
         st.rerun()
 else:
     demog_df = target_df.copy()
