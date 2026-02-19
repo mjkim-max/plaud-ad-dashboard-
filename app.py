@@ -42,6 +42,7 @@ st.markdown("""
     .tl-wrap {background: transparent; border: 0; border-radius: 0; padding: 0;}
     .tl-panel {background: #efefef; border: 0; border-radius: 8px; padding: 10px;}
     .tl-cell button {width: 48px !important; height: 44px !important; padding: 0 !important;}
+    .tl-cell-selected button {border: 2px solid #111 !important;}
     .tl-cell button p {font-size: 11px !important; line-height: 1.1;}
     .tl-form {display: flex; align-items: center; gap: 8px;}
     .sec-divider {border-top: 1px solid #eef0f2; margin: 10px 0;}
@@ -434,10 +435,9 @@ if not diag_res.empty:
                         elif act == "종료":
                             icon = "🟥"
                         label = f"{icon}\n{d.strftime('%m/%d')}"
-                        if d_str == selected_date:
-                            label = f"◎{label}"
                         with col:
-                            st.markdown("<div class='tl-cell'>", unsafe_allow_html=True)
+                            cls = "tl-cell-selected" if d_str == selected_date else "tl-cell"
+                            st.markdown(f"<div class='{cls}'>", unsafe_allow_html=True)
                             key_id = f"tl_{item['name']}_{r['AdGroup']}_{cid}_{d_str}_{idx}"
                             if st.button(label, key=key_id, on_click=_set_selected_date, args=(cid, d_str)):
                                 pass
