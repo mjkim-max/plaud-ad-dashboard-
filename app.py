@@ -579,22 +579,18 @@ trend_df = target_df.copy()
 demog_df = pd.DataFrame()
 is_specific = False
 
-if target_creative is not None and target_creative != "":
-    if 'Creative_ID' in trend_df.columns:
+has_selection = (target_creative is not None and str(target_creative) != "") or bool(target_adgroup) or bool(target_campaign)
+if has_selection:
+    if target_creative and 'Creative_ID' in trend_df.columns:
         trend_df['Creative_ID'] = trend_df['Creative_ID'].astype(str)
-    trend_df = trend_df[trend_df['Creative_ID'] == str(target_creative)]
-    sel_row = trend_df
-else:
-    # Creative_ID가 비어있는 경우, 광고그룹+캠페인 기준으로 선택
-    if target_adgroup or target_campaign:
-        sel_row = trend_df
-        if target_adgroup:
-            sel_row = sel_row[sel_row['AdGroup'] == target_adgroup]
-        if target_campaign:
-            sel_row = sel_row[sel_row['Campaign'] == target_campaign]
-        trend_df = sel_row
+        trend_df = trend_df[trend_df['Creative_ID'] == str(target_creative)]
     else:
-        sel_row = pd.DataFrame()
+        if target_adgroup:
+            trend_df = trend_df[trend_df['AdGroup'] == target_adgroup]
+        if target_campaign:
+            trend_df = trend_df[trend_df['Campaign'] == target_campaign]
+
+    sel_row = trend_df
     if not sel_row.empty:
         platform = sel_row['Platform'].iloc[0]
         current_adgroup = target_adgroup if target_adgroup else sel_row['AdGroup'].iloc[0]
