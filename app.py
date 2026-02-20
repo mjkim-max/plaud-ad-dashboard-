@@ -276,7 +276,11 @@ else:
 diag_res = run_diagnosis(diag_base, target_cpa_warning)
 
 if not diag_res.empty:
-    actions_df = load_actions()
+    if "actions_cache" not in st.session_state:
+        st.session_state["actions_cache"] = None
+    if st.session_state["actions_cache"] is None:
+        st.session_state["actions_cache"] = load_actions()
+    actions_df = st.session_state["actions_cache"]
     # 진단 결과에 최신 Status 병합
     if "Status" in df_raw.columns:
         status_src = df_raw.copy()
@@ -491,6 +495,7 @@ if not diag_res.empty:
                             if selected_date:
                                 try:
                                     delete_action(action_date=selected_date, creative_key=cid)
+                                    st.session_state["actions_cache"] = None
                                     st.success("삭제 완료")
                                     st.rerun()
                                 except Exception as e:
@@ -512,6 +517,7 @@ if not diag_res.empty:
                                         note=note,
                                         author="",
                                     )
+                                    st.session_state["actions_cache"] = None
                                     st.success("저장 완료")
                                     st.rerun()
                                 except Exception as e:
