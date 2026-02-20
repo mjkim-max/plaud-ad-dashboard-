@@ -99,12 +99,16 @@ def fetch_google_ads_insights(
       segments.date,
       campaign.id,
       campaign.name,
+      ad_group.id,
+      ad_group.name,
+      ad_group_ad.ad.id,
+      ad_group_ad.ad.name,
       metrics.impressions,
       metrics.clicks,
       metrics.cost_micros,
       metrics.conversions,
       metrics.conversions_value
-    FROM campaign
+    FROM ad_group_ad
     WHERE segments.date BETWEEN '{since}' AND '{until}'
     """
 
@@ -120,8 +124,8 @@ def fetch_google_ads_insights(
                     {
                         "Date": str(row.segments.date),
                         "Campaign": row.campaign.name or "",
-                        "AdGroup": "",
-                        "Creative_ID": "",
+                        "AdGroup": row.ad_group.name or "",
+                        "Creative_ID": row.ad_group_ad.ad.name or str(row.ad_group_ad.ad.id or ""),
                         "Cost": cost_micros / 1_000_000,
                         "Impressions": row.metrics.impressions or 0,
                         "Clicks": row.metrics.clicks or 0,

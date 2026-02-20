@@ -383,6 +383,12 @@ def load_main_data():
     if 'Date' in df.columns:
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
 
+    # Google 소재명이 비어있는 경우: AdGroup 기반으로 채움 (소재 단위 분리용)
+    if "Platform" in df.columns and "Creative_ID" in df.columns and "AdGroup" in df.columns:
+        google_mask = df["Platform"] == "Google"
+        empty_creative = df["Creative_ID"].isna() | (df["Creative_ID"].astype(str).str.strip() == "")
+        df.loc[google_mask & empty_creative, "Creative_ID"] = df.loc[google_mask & empty_creative, "AdGroup"]
+
     num_cols = ['Cost', 'Impressions', 'Clicks', 'Conversions', 'Conversion_Value']
     for col in num_cols:
         if col in df.columns:
