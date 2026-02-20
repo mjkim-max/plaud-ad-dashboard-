@@ -64,20 +64,31 @@ def _get_sheet():
 
 
 def _sheet_to_df(ws) -> pd.DataFrame:
-    rows = ws.get_all_records()
-    if not rows:
+    values = ws.get_all_values()
+    if not values:
         return pd.DataFrame(columns=_COLUMNS)
-    df = pd.DataFrame(rows)
-    for col in _COLUMNS:
-        if col not in df.columns:
-            df[col] = ""
-    return df[_COLUMNS]
+    header = values[0]
+    # If header doesn't match expected, treat all rows as data
+    if header != _COLUMNS:
+        data_rows = values
+    else:
+        data_rows = values[1:]
+    cleaned = []
+    for row in data_rows:
+        r = list(row)[:len(_COLUMNS)]
+        if len(r) < len(_COLUMNS):
+            r += [""] * (len(_COLUMNS) - len(r))
+        cleaned.append(r)
+    return pd.DataFrame(cleaned, columns=_COLUMNS)
 
 
 def _ensure_sheet_header(ws) -> None:
     existing = ws.get_all_values()
     if not existing:
         ws.append_row(_COLUMNS)
+        return
+    if existing[0] != _COLUMNS:
+        ws.insert_row(_COLUMNS, index=1)
 
 
 def load_actions() -> pd.DataFrame:
