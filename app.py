@@ -225,6 +225,9 @@ st.subheader("1. 캠페인 성과 진단")
 # 조치 내용 출력
 st.markdown("<div class='sec-divider'></div>", unsafe_allow_html=True)
 st.markdown("##### 조치 내용 출력")
+sheet_err = st.session_state.get("sheet_error")
+if sheet_err:
+    st.error(f"조치 시트 연결 오류: {sheet_err}")
 report_cols = st.columns([2, 1, 6])
 with report_cols[0]:
     report_date = st.date_input("날짜 선택", datetime.now().date(), key="action_report_date")
@@ -373,239 +376,240 @@ if not diag_res.empty:
                     unsafe_allow_html=True,
                 )
 
-            col0, col1, col2, col3 = st.columns([1, 1, 1, 1])
+                col0, col1, col2, col3 = st.columns([1, 1, 1, 1])
 
-            def format_stat_block(label, cpa, cost, conv, text_color):
-                cpa_val = "∞" if cpa == np.inf or (isinstance(cpa, float) and np.isinf(cpa)) else f"{cpa:,.0f}"
-                return (
-                    f"<div style=\"line-height:1.6; color:{text_color};\">"
-                    f"<strong>{label}</strong><br>CPA <strong>{cpa_val}원</strong><br>"
-                    f"비용 {cost:,.0f}원<br>전환 {conv:,.0f}</div>"
-                )
-
-            cpa_t = r.get("CPA_today", 0) or 0
-            cost_t = r.get("Cost_today", 0) or 0
-            conv_t = r.get("Conversions_today", 0) or 0
-            t_color = inactive_color if is_inactive else "inherit"
-            with col0: st.markdown(format_stat_block("오늘", cpa_t, cost_t, conv_t, t_color), unsafe_allow_html=True)
-            with col1: st.markdown(format_stat_block("3일", r['CPA_3'], r['Cost_3'], r['Conversions_3'], t_color), unsafe_allow_html=True)
-            with col2: st.markdown(format_stat_block("7일", r['CPA_7'], r['Cost_7'], r['Conversions_7'], t_color), unsafe_allow_html=True)
-            with col3: st.markdown(format_stat_block("14일", r['CPA_14'], r['Cost_14'], r['Conversions_14'], t_color), unsafe_allow_html=True)
-
-            # 소재별 타임라인/입력/진단 (최근 14일)
-            today = datetime.now().date()
-            start = today - timedelta(days=13)
-            dates = [start + timedelta(days=i) for i in range(14)]
-            cid = creative_key
-            if cid not in st.session_state["action_selected"]:
-                _set_selected_date(cid, today.isoformat())
-            selected_date = st.session_state["action_selected"].get(cid, "")
-
-            if not actions_df.empty:
-                ad_actions = actions_df[actions_df["creative_key"] == cid]
-            else:
-                ad_actions = pd.DataFrame(columns=actions_df.columns)
-
-            action_by_date = {}
-            for _, ar in ad_actions.iterrows():
-                action_by_date[str(ar["action_date"])] = str(ar["action"]).strip()
-
-            # 3컬럼: 좌/중/우 + 중간 여백
-            tl_left, gap1, tl_mid, gap2, tl_right = st.columns([3, 0.4, 3, 0.4, 3])
-            with tl_left:
-                st.markdown("<div class='tl-panel'>", unsafe_allow_html=True)
-                st.markdown("<div class='tl-wrap'>", unsafe_allow_html=True)
-                weekday_cols = st.columns(7)
-                weekday_labels = ["일", "월", "화", "수", "목", "금", "토"]
-                for col, lbl in zip(weekday_cols, weekday_labels):
-                    col.markdown(f"<div class='tl-note'><strong>{lbl}</strong></div>", unsafe_allow_html=True)
-
-                # 요일 정렬을 위한 빈 칸 보정
-                offset = (start.weekday() + 1) % 7  # Sunday=0
-                cells = [""] * offset + [d.isoformat() for d in dates]
-                while len(cells) % 7 != 0:
-                    cells.append("")
-
-                for row_start in range(0, len(cells), 7):
-                    cols = st.columns(7)
-                    for col, d_str in zip(cols, cells[row_start:row_start + 7]):
-                        if not d_str:
-                            col.markdown("<div class='tl-note'></div>", unsafe_allow_html=True)
-                            continue
-                        d = datetime.fromisoformat(d_str).date()
-                        act = action_by_date.get(d_str, "").strip()
-                        icon = "⬜"
-                        if act == "증액":
-                            icon = "🟦"
-                        elif act == "보류":
-                            icon = "🟨"
-                        elif act == "종료":
-                            icon = "🟥"
-                        label = f"{icon}\n{d.strftime('%m/%d')}"
-                        with col:
-                            cls = "tl-cell-selected" if d_str == selected_date else "tl-cell"
-                            st.markdown(f"<div class='{cls}'>", unsafe_allow_html=True)
-                            key_id = f"tl_{item['name']}_{r['AdGroup']}_{cid}_{d_str}_{idx}"
-                            if st.button(label, key=key_id, on_click=_set_selected_date, args=(cid, d_str)):
-                                pass
-                            st.markdown("</div>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-
-            with tl_mid:
-                st.markdown("<div class='tl-panel'>", unsafe_allow_html=True)
-                if selected_date:
-                    st.caption(f"선택된 날짜: {selected_date}")
-                else:
-                    st.caption("선택된 날짜: 없음")
-                if selected_date:
-                    existing = ad_actions[ad_actions["action_date"] == selected_date]
-                    existing_action = existing["action"].iloc[0] if not existing.empty else ""
-                    existing_note = existing["note"].iloc[0] if not existing.empty else ""
-                else:
-                    existing_action = ""
-                    existing_note = ""
-
-                form_key = f"act_form_{item['name']}_{r['AdGroup']}_{cid}_{selected_date or 'none'}_{idx}"
-                with st.form(key=form_key):
-                    action = st.selectbox(
-                        "구분",
-                        ["증액", "보류", "종료", "유지"],
-                        index=["증액", "보류", "종료", "유지"].index(existing_action)
-                        if existing_action in ["증액", "보류", "종료", "유지"] else 3
+                def format_stat_block(label, cpa, cost, conv, text_color):
+                    cpa_val = "∞" if cpa == np.inf or (isinstance(cpa, float) and np.isinf(cpa)) else f"{cpa:,.0f}"
+                    return (
+                        f"<div style=\"line-height:1.6; color:{text_color};\">"
+                        f"<strong>{label}</strong><br>CPA <strong>{cpa_val}원</strong><br>"
+                        f"비용 {cost:,.0f}원<br>전환 {conv:,.0f}</div>"
                     )
-                    note = st.text_area("상세 내용", value=existing_note, height=140)
-                    btn_cols = st.columns([1, 1, 6])
-                    with btn_cols[0]:
-                        submitted = st.form_submit_button("저장")
-                    with btn_cols[1]:
-                        do_delete = st.form_submit_button("삭제")
 
-                    if do_delete:
-                        if selected_date:
-                            try:
-                                delete_action(action_date=selected_date, creative_key=cid)
-                                st.success("삭제 완료")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"삭제 실패: {e}")
-                        else:
-                            st.info("날짜를 먼저 선택하세요.")
-                    if submitted:
-                        if not selected_date:
-                            st.info("날짜를 먼저 선택하세요.")
-                        else:
-                            try:
-                                upsert_action(
-                                    action_date=selected_date,
-                                    creative_id=creative_id,
-                                    creative_key=cid,
-                                    campaign=str(r.get("Campaign", "")),
-                                    adgroup=str(r.get("AdGroup", "")),
-                                    action=action,
-                                    note=note,
-                                    author="",
-                                )
-                                st.success("저장 완료")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"저장 실패: {e}")
-                st.markdown("</div>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
+                cpa_t = r.get("CPA_today", 0) or 0
+                cost_t = r.get("Cost_today", 0) or 0
+                conv_t = r.get("Conversions_today", 0) or 0
+                t_color = inactive_color if is_inactive else "inherit"
+                with col0: st.markdown(format_stat_block("오늘", cpa_t, cost_t, conv_t, t_color), unsafe_allow_html=True)
+                with col1: st.markdown(format_stat_block("3일", r['CPA_3'], r['Cost_3'], r['Conversions_3'], t_color), unsafe_allow_html=True)
+                with col2: st.markdown(format_stat_block("7일", r['CPA_7'], r['Cost_7'], r['Conversions_7'], t_color), unsafe_allow_html=True)
+                with col3: st.markdown(format_stat_block("14일", r['CPA_14'], r['Cost_14'], r['Conversions_14'], t_color), unsafe_allow_html=True)
 
-            with tl_right:
-                st.markdown("<div class='tl-panel'>", unsafe_allow_html=True)
-                st.markdown("<div style='font-size: 1.1rem; font-weight: 700; margin-bottom: 6px;'>조치 추천</div>", unsafe_allow_html=True)
-                title_style = f"color:{inactive_color};" if is_inactive else ""
-                detail_style = f"color:{inactive_color};" if is_inactive else ""
-                st.markdown(f"<div style='{title_style}'><strong>{r['Diag_Title']}</strong></div>", unsafe_allow_html=True)
-                detail_txt = str(r.get("Diag_Detail", ""))
-                st.markdown(f"<div style='{detail_style} font-size: 0.85rem; margin-bottom: 6px;'>{detail_txt}</div>", unsafe_allow_html=True)
-                def _safe(v):
-                    if v is None or v == np.inf or (isinstance(v, float) and np.isinf(v)):
-                        return None
-                    return float(v)
+                # 소재별 타임라인/입력/진단 (최근 14일)
+                today = datetime.now().date()
+                start = today - timedelta(days=13)
+                dates = [start + timedelta(days=i) for i in range(14)]
+                cid = creative_key
+                if cid not in st.session_state["action_selected"]:
+                    _set_selected_date(cid, today.isoformat())
+                selected_date = st.session_state["action_selected"].get(cid, "")
 
-                def _pct_change(a, b):
-                    if a in (None, 0) or b is None:
-                        return None
-                    return (b - a) / a
+                if not actions_df.empty:
+                    ad_actions = actions_df[actions_df["creative_key"] == cid]
+                else:
+                    ad_actions = pd.DataFrame(columns=actions_df.columns)
 
-                def _trend_icon(v):
-                    if v is None:
+                action_by_date = {}
+                for _, ar in ad_actions.iterrows():
+                    action_by_date[str(ar["action_date"])] = str(ar["action"]).strip()
+
+                # 3컬럼: 좌/중/우 + 중간 여백
+                tl_left, gap1, tl_mid, gap2, tl_right = st.columns([3, 0.4, 3, 0.4, 3])
+                with tl_left:
+                    st.markdown("<div class='tl-panel'>", unsafe_allow_html=True)
+                    st.markdown("<div class='tl-wrap'>", unsafe_allow_html=True)
+                    weekday_cols = st.columns(7)
+                    weekday_labels = ["일", "월", "화", "수", "목", "금", "토"]
+                    for col, lbl in zip(weekday_cols, weekday_labels):
+                        col.markdown(f"<div class='tl-note'><strong>{lbl}</strong></div>", unsafe_allow_html=True)
+
+                    # 요일 정렬을 위한 빈 칸 보정
+                    offset = (start.weekday() + 1) % 7  # Sunday=0
+                    cells = [""] * offset + [d.isoformat() for d in dates]
+                    while len(cells) % 7 != 0:
+                        cells.append("")
+
+                    for row_start in range(0, len(cells), 7):
+                        cols = st.columns(7)
+                        for col, d_str in zip(cols, cells[row_start:row_start + 7]):
+                            if not d_str:
+                                col.markdown("<div class='tl-note'></div>", unsafe_allow_html=True)
+                                continue
+                            d = datetime.fromisoformat(d_str).date()
+                            act = action_by_date.get(d_str, "").strip()
+                            icon = "⬜"
+                            if act == "증액":
+                                icon = "🟦"
+                            elif act == "보류":
+                                icon = "🟨"
+                            elif act == "종료":
+                                icon = "🟥"
+                            label = f"{icon}\n{d.strftime('%m/%d')}"
+                            with col:
+                                cls = "tl-cell-selected" if d_str == selected_date else "tl-cell"
+                                st.markdown(f"<div class='{cls}'>", unsafe_allow_html=True)
+                                key_id = f"tl_{item['name']}_{r['AdGroup']}_{cid}_{d_str}_{idx}"
+                                if st.button(label, key=key_id, on_click=_set_selected_date, args=(cid, d_str)):
+                                    pass
+                                st.markdown("</div>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                with tl_mid:
+                    st.markdown("<div class='tl-panel'>", unsafe_allow_html=True)
+                    if selected_date:
+                        st.caption(f"선택된 날짜: {selected_date}")
+                    else:
+                        st.caption("선택된 날짜: 없음")
+                    if selected_date:
+                        existing = ad_actions[ad_actions["action_date"] == selected_date]
+                        existing_action = existing["action"].iloc[0] if not existing.empty else ""
+                        existing_note = existing["note"].iloc[0] if not existing.empty else ""
+                    else:
+                        existing_action = ""
+                        existing_note = ""
+
+                    form_key = f"act_form_{item['name']}_{r['AdGroup']}_{cid}_{selected_date or 'none'}_{idx}"
+                    with st.form(key=form_key):
+                        action = st.selectbox(
+                            "구분",
+                            ["증액", "보류", "종료", "유지"],
+                            index=["증액", "보류", "종료", "유지"].index(existing_action)
+                            if existing_action in ["증액", "보류", "종료", "유지"] else 3
+                        )
+                        note = st.text_area("상세 내용", value=existing_note, height=140)
+                        btn_cols = st.columns([1, 1, 6])
+                        with btn_cols[0]:
+                            submitted = st.form_submit_button("저장")
+                        with btn_cols[1]:
+                            do_delete = st.form_submit_button("삭제")
+
+                        if do_delete:
+                            if selected_date:
+                                try:
+                                    delete_action(action_date=selected_date, creative_key=cid)
+                                    st.success("삭제 완료")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"삭제 실패: {e}")
+                            else:
+                                st.info("날짜를 먼저 선택하세요.")
+                        if submitted:
+                            if not selected_date:
+                                st.info("날짜를 먼저 선택하세요.")
+                            else:
+                                try:
+                                    upsert_action(
+                                        action_date=selected_date,
+                                        creative_id=creative_id,
+                                        creative_key=cid,
+                                        campaign=str(r.get("Campaign", "")),
+                                        adgroup=str(r.get("AdGroup", "")),
+                                        action=action,
+                                        note=note,
+                                        author="",
+                                    )
+                                    st.success("저장 완료")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"저장 실패: {e}")
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                with tl_right:
+                    st.markdown("<div class='tl-panel'>", unsafe_allow_html=True)
+                    st.markdown("<div style='font-size: 1.1rem; font-weight: 700; margin-bottom: 6px;'>조치 추천</div>", unsafe_allow_html=True)
+                    title_style = f"color:{inactive_color};" if is_inactive else ""
+                    detail_style = f"color:{inactive_color};" if is_inactive else ""
+                    st.markdown(f"<div style='{title_style}'><strong>{r['Diag_Title']}</strong></div>", unsafe_allow_html=True)
+                    detail_txt = str(r.get("Diag_Detail", ""))
+                    st.markdown(f"<div style='{detail_style} font-size: 0.85rem; margin-bottom: 6px;'>{detail_txt}</div>", unsafe_allow_html=True)
+
+                    def _safe(v):
+                        if v is None or v == np.inf or (isinstance(v, float) and np.isinf(v)):
+                            return None
+                        return float(v)
+
+                    def _pct_change(a, b):
+                        if a in (None, 0) or b is None:
+                            return None
+                        return (b - a) / a
+
+                    def _trend_icon(v):
+                        if v is None:
+                            return "➖"
+                        if v > 0:
+                            return "📈"
+                        if v < 0:
+                            return "📉"
                         return "➖"
-                    if v > 0:
-                        return "📈"
-                    if v < 0:
-                        return "📉"
-                    return "➖"
 
-                def _trend_label(v):
-                    if v is None:
+                    def _trend_label(v):
+                        if v is None:
+                            return "보합"
+                        if v > 0:
+                            return "상승"
+                        if v < 0:
+                            return "하락"
                         return "보합"
-                    if v > 0:
-                        return "상승"
-                    if v < 0:
-                        return "하락"
-                    return "보합"
 
-                cpa_14 = _safe(r.get("CPA_14"))
-                cpa_7 = _safe(r.get("CPA_7"))
-                cpa_3 = _safe(r.get("CPA_3"))
+                    cpa_14 = _safe(r.get("CPA_14"))
+                    cpa_7 = _safe(r.get("CPA_7"))
+                    cpa_3 = _safe(r.get("CPA_3"))
 
-                def _cpa_dot(v):
-                    if v is None:
+                    def _cpa_dot(v):
+                        if v is None:
+                            return "⚪"
+                        if v <= 80000:
+                            return "🔵"
+                        if v >= 120000:
+                            return "🔴"
                         return "⚪"
-                    if v <= 80000:
-                        return "🔵"
-                    if v >= 120000:
-                        return "🔴"
-                    return "⚪"
 
-                cpa_flow_text = f"{_cpa_dot(cpa_14)}➡{_cpa_dot(cpa_7)}➡{_cpa_dot(cpa_3)}"
-                st.markdown("**CPA 흐름 (14→7→3)**")
-                st.markdown(cpa_flow_text)
+                    cpa_flow_text = f"{_cpa_dot(cpa_14)}➡{_cpa_dot(cpa_7)}➡{_cpa_dot(cpa_3)}"
+                    st.markdown("**CPA 흐름 (14→7→3)**")
+                    st.markdown(cpa_flow_text)
 
-                cpm_7 = _safe(r.get("CPM_7"))
-                cpm_3 = _safe(r.get("CPM_3"))
-                cpm_change = _pct_change(cpm_7, cpm_3)
-                cpm_label = _trend_label(cpm_change)
-                cpm_icon = _trend_icon(cpm_change)
-                cpm_pct = f"{cpm_change*100:,.0f}%" if cpm_change is not None else "-"
-                st.markdown(f"**CPM 추세 (3d vs 7d)**  \n{cpm_icon} {cpm_label} ({cpm_pct})")
+                    cpm_7 = _safe(r.get("CPM_7"))
+                    cpm_3 = _safe(r.get("CPM_3"))
+                    cpm_change = _pct_change(cpm_7, cpm_3)
+                    cpm_label = _trend_label(cpm_change)
+                    cpm_icon = _trend_icon(cpm_change)
+                    cpm_pct = f"{cpm_change*100:,.0f}%" if cpm_change is not None else "-"
+                    st.markdown(f"**CPM 추세 (3d vs 7d)**  \n{cpm_icon} {cpm_label} ({cpm_pct})")
 
-                ctr_7 = _safe(r.get("CTR_7"))
-                ctr_3 = _safe(r.get("CTR_3"))
-                ctr_change = _pct_change(ctr_7, ctr_3)
-                ctr_label = _trend_label(ctr_change)
-                ctr_icon = _trend_icon(ctr_change)
-                ctr_pct = f"{ctr_change*100:,.0f}%" if ctr_change is not None else "-"
-                st.markdown(f"**CTR 추세 (3d vs 7d)**  \n{ctr_icon} {ctr_label} ({ctr_pct})")
+                    ctr_7 = _safe(r.get("CTR_7"))
+                    ctr_3 = _safe(r.get("CTR_3"))
+                    ctr_change = _pct_change(ctr_7, ctr_3)
+                    ctr_label = _trend_label(ctr_change)
+                    ctr_icon = _trend_icon(ctr_change)
+                    ctr_pct = f"{ctr_change*100:,.0f}%" if ctr_change is not None else "-"
+                    st.markdown(f"**CTR 추세 (3d vs 7d)**  \n{ctr_icon} {ctr_label} ({ctr_pct})")
 
-                cvr_7 = _safe(r.get("CVR_7"))
-                cvr_3 = _safe(r.get("CVR_3"))
-                cvr_change = _pct_change(cvr_7, cvr_3)
-                cvr_label = _trend_label(cvr_change)
-                cvr_icon = _trend_icon(cvr_change)
-                cvr_pct = f"{cvr_change*100:,.0f}%" if cvr_change is not None else "-"
-                st.markdown(f"**CVR 추세 (3d vs 7d)**  \n{cvr_icon} {cvr_label} ({cvr_pct})")
+                    cvr_7 = _safe(r.get("CVR_7"))
+                    cvr_3 = _safe(r.get("CVR_3"))
+                    cvr_change = _pct_change(cvr_7, cvr_3)
+                    cvr_label = _trend_label(cvr_change)
+                    cvr_icon = _trend_icon(cvr_change)
+                    cvr_pct = f"{cvr_change*100:,.0f}%" if cvr_change is not None else "-"
+                    st.markdown(f"**CVR 추세 (3d vs 7d)**  \n{cvr_icon} {cvr_label} ({cvr_pct})")
 
-                # 간단 규칙 기반 스토리
-                story = "데이터가 부족해 명확한 결론을 내리기 어렵습니다."
-                if cpm_change is not None and ctr_change is not None:
-                    if cpm_change < 0 and ctr_change < 0:
-                        story = "CPM/CTR이 함께 내려가는 흐름입니다. 기존 타겟 소진 후 확장 구간일 가능성이 있어 2~3일 관망이 합리적입니다."
-                    elif cpm_change > 0 and ctr_change > 0:
-                        story = "CPM/CTR이 함께 상승합니다. 타겟 정교화 또는 학습 재수렴 신호일 수 있어 성과 지표와 함께 확인하세요."
-                st.markdown("**🤖 AI 분석 코멘트 (스토리)**")
-                st.caption(story)
-                unique_key = f"btn_{item['name']}_{r['Creative_ID']}_{idx}"
-                if st.button("분석하기", key=unique_key):
-                    st.session_state['chart_target_creative'] = str(r.get('Creative_ID', ''))
-                    st.session_state['chart_target_adgroup'] = r['AdGroup']
-                    st.session_state['chart_target_campaign'] = r['Campaign']
-                    st.rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
+                    # 간단 규칙 기반 스토리
+                    story = "데이터가 부족해 명확한 결론을 내리기 어렵습니다."
+                    if cpm_change is not None and ctr_change is not None:
+                        if cpm_change < 0 and ctr_change < 0:
+                            story = "CPM/CTR이 함께 내려가는 흐름입니다. 기존 타겟 소진 후 확장 구간일 가능성이 있어 2~3일 관망이 합리적입니다."
+                        elif cpm_change > 0 and ctr_change > 0:
+                            story = "CPM/CTR이 함께 상승합니다. 타겟 정교화 또는 학습 재수렴 신호일 수 있어 성과 지표와 함께 확인하세요."
+                    st.markdown("**🤖 AI 분석 코멘트 (스토리)**")
+                    st.caption(story)
+                    unique_key = f"btn_{item['name']}_{r['Creative_ID']}_{idx}"
+                    if st.button("분석하기", key=unique_key):
+                        st.session_state['chart_target_creative'] = str(r.get('Creative_ID', ''))
+                        st.session_state['chart_target_adgroup'] = r['AdGroup']
+                        st.session_state['chart_target_campaign'] = r['Campaign']
+                        st.rerun()
+                    st.markdown("</div>", unsafe_allow_html=True)
 
             st.markdown("<div class='sec-divider'></div>", unsafe_allow_html=True)
 else:

@@ -52,8 +52,15 @@ def _get_sheet():
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = Credentials.from_service_account_info(dict(sa), scopes=scopes)
     client = gspread.authorize(creds)
-    ss = client.open_by_key(sheet_id)
-    return ss.worksheet(worksheet)
+    try:
+        ss = client.open_by_key(sheet_id)
+        return ss.worksheet(worksheet)
+    except Exception as e:
+        try:
+            st.session_state["sheet_error"] = str(e)
+        except Exception:
+            pass
+        return None
 
 
 def _sheet_to_df(ws) -> pd.DataFrame:
