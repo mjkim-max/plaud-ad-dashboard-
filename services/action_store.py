@@ -85,7 +85,16 @@ def load_actions() -> pd.DataFrame:
     if ws is not None:
         try:
             _ensure_sheet_header(ws)
-            return _sheet_to_df(ws)
+            df = _sheet_to_df(ws)
+            # Backfill creative_key if missing/empty
+            if "creative_key" in df.columns:
+                for i, row in df.iterrows():
+                    if not str(row.get("creative_key", "")).strip():
+                        cid = str(row.get("creative_id", "")).strip()
+                        camp = str(row.get("campaign", "")).strip()
+                        adg = str(row.get("adgroup", "")).strip()
+                        df.at[i, "creative_key"] = cid if cid else f"{camp}|{adg}"
+            return df
         except Exception:
             return pd.DataFrame(columns=_COLUMNS)
     path = _store_path()

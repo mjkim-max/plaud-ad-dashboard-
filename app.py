@@ -405,7 +405,10 @@ if not diag_res.empty:
                 selected_date = st.session_state["action_selected"].get(cid, "")
 
                 if not actions_df.empty:
-                    ad_actions = actions_df[actions_df["creative_key"] == cid]
+                    ad_actions = actions_df[
+                        (actions_df["creative_key"] == cid) |
+                        (actions_df["creative_id"] == creative_id)
+                    ]
                 else:
                     ad_actions = pd.DataFrame(columns=actions_df.columns)
 
