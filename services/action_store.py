@@ -76,7 +76,11 @@ def _ensure_sheet_header(ws) -> None:
 def load_actions() -> pd.DataFrame:
     ws = _get_sheet()
     if ws is not None:
-        return _sheet_to_df(ws)
+        try:
+            _ensure_sheet_header(ws)
+            return _sheet_to_df(ws)
+        except Exception:
+            return pd.DataFrame(columns=_COLUMNS)
     path = _store_path()
     if not path.exists():
         return pd.DataFrame(columns=_COLUMNS)
