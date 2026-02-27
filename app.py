@@ -701,7 +701,7 @@ freq_map = {"1일": "D", "3일": "3D", "7일": "W"}
 metrics = c_opts.multiselect(
     "지표 선택",
     ['Impressions', 'Clicks', 'CTR', 'CPM', 'CPC', 'CPA', 'Cost', 'Conversions', 'CVR', 'ROAS'],
-    default=['Conversions', 'CPA', 'CTR', 'Impressions']
+    default=['Conversions', 'CPM', 'CTR', 'Impressions']
 )
 use_norm = c_norm.checkbox("데이터 정규화 (0-100%)", value=True)
 
