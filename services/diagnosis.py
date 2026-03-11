@@ -123,15 +123,15 @@ def run_diagnosis(df, target_cpa):
         status, title, detail = "White", "", ""
 
         if (cpa14 <= target_cpa) and (cpa7 <= target_cpa) and (cpa3 <= target_cpa):
-            status = "Blue"; title = "성과 우수 (Best)"; detail = "14일/7일/3일(전일기준) 모두 목표 달성."
+            status = "Blue"; title = "성과 우수 (Best)"; detail = "14일/7일/3일 모두 목표 달성."
         elif (cpa14 > target_cpa) and (cpa7 > target_cpa) and (cpa3 > target_cpa):
-            status = "Red"; title = "종료 추천 (지속 부진)"; detail = "14일/7일/3일(전일기준) 모두 목표 미달성."
+            status = "Red"; title = "종료 추천 (지속 부진)"; detail = "14일/7일/3일 모두 목표 미달성."
         else:
             status = "Yellow"
             if cpa3 <= target_cpa:
-                title = "성장 가능성 (반등)"; detail = "과거엔 목표 초과했으나, 최근 3일(전일기준)은 목표 달성."
+                title = "성장 가능성 (반등)"; detail = "과거엔 목표 초과했으나, 최근 3일은 목표 달성."
             else:
-                title = "관망 필요 (최근 저하)"; detail = "과거엔 좋았으나, 최근 3일(전일기준)은 목표 초과."
+                title = "관망 필요 (최근 저하)"; detail = "과거엔 좋았으나, 최근 3일은 목표 초과."
 
         # 추가 진단 문구
         cpa_14_7 = _trend(row.get("CPA_14", np.inf), row.get("CPA_7", np.inf))
