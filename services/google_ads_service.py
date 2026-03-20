@@ -99,8 +99,11 @@ def fetch_google_ads_insights(
       segments.date,
       campaign.id,
       campaign.name,
+      campaign.status,
       ad_group.id,
       ad_group.name,
+      ad_group.status,
+      ad_group_ad.status,
       ad_group_ad.ad.id,
       ad_group_ad.ad.name,
       metrics.impressions,
@@ -120,6 +123,14 @@ def fetch_google_ads_insights(
         for batch in stream:
             for row in batch.results:
                 cost_micros = row.metrics.cost_micros or 0
+                campaign_status = str(row.campaign.status or "").strip().upper()
+                ad_group_status = str(row.ad_group.status or "").strip().upper()
+                ad_status = str(row.ad_group_ad.status or "").strip().upper()
+                is_on = (
+                    campaign_status == "ENABLED"
+                    and ad_group_status == "ENABLED"
+                    and ad_status == "ENABLED"
+                )
                 rows.append(
                     {
                         "Date": str(row.segments.date),
@@ -131,7 +142,7 @@ def fetch_google_ads_insights(
                         "Clicks": row.metrics.clicks or 0,
                         "Conversions": row.metrics.conversions or 0,
                         "Conversion_Value": row.metrics.conversions_value or 0,
-                        "Status": "On",
+                        "Status": "ACTIVE" if is_on else "PAUSED",
                         "Platform": "Google",
                         "Gender": "Unknown",
                         "Age": "Unknown",
