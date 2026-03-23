@@ -206,57 +206,6 @@ def _is_active_status_value(raw: str) -> bool:
     return str(raw or "").strip().upper() in _ACTIVE_STATUS
 
 
-def _annotate_effective_delivery_status(df_src: pd.DataFrame) -> pd.DataFrame:
-    if df_src is None or df_src.empty:
-        return df_src.copy() if isinstance(df_src, pd.DataFrame) else pd.DataFrame()
-
-    work = df_src.copy()
-    if "Status" not in work.columns:
-        work["Status"] = ""
-
-    work["Effective_Is_On"] = work["Status"].astype(str).apply(_is_active_status_value)
-    work["Effective_Status"] = np.where(work["Effective_Is_On"], "ACTIVE", "PAUSED")
-
-    if "Platform" not in work.columns or "Ad_ID" not in work.columns:
-        return work
-
-    meta_mask = work["Platform"].astype(str).str.upper() == "META"
-    if not meta_mask.any():
-        return work
-
-    meta_rows = work.loc[meta_mask].copy()
-    meta_rows["ad_id"] = meta_rows["Ad_ID"].astype(str).str.strip()
-    meta_rows["status_raw"] = meta_rows["Status"].astype(str).str.upper().str.strip()
-
-    ad_ids = sorted({v for v in meta_rows["ad_id"].tolist() if v and v.lower() != "nan"})
-    asset_map = _fetch_meta_video_assets_cached(tuple(ad_ids)) if ad_ids else {}
-
-    meta_rows["ad_status"] = meta_rows["ad_id"].map(
-        lambda x: str((asset_map.get(str(x)) or {}).get("ad_status") or "").upper().strip()
-    )
-    meta_rows["adset_status"] = meta_rows["ad_id"].map(
-        lambda x: str((asset_map.get(str(x)) or {}).get("adset_status") or "").upper().strip()
-    )
-    meta_rows["campaign_status"] = meta_rows["ad_id"].map(
-        lambda x: str((asset_map.get(str(x)) or {}).get("campaign_status") or "").upper().strip()
-    )
-
-    # ad_status만 비었을 때는 기존 Status를 보조값으로 쓰되,
-    # 게재중 판단은 ad/adset/campaign 셋 모두 활성일 때만 True.
-    meta_rows["ad_status"] = meta_rows["ad_status"].replace("", np.nan).fillna(meta_rows["status_raw"])
-    meta_rows["Effective_Is_On"] = (
-        meta_rows["ad_status"].apply(_is_active_status_value)
-        & meta_rows["adset_status"].apply(_is_active_status_value)
-        & meta_rows["campaign_status"].apply(_is_active_status_value)
-    )
-    meta_rows["Effective_Status"] = np.where(meta_rows["Effective_Is_On"], "ACTIVE", "PAUSED")
-
-    for col in ("ad_status", "adset_status", "campaign_status", "Effective_Is_On", "Effective_Status"):
-        work.loc[meta_rows.index, col] = meta_rows[col]
-
-    return work
-
-
 @st.cache_data(ttl=1800)
 def _load_material_status_source_cached(days: int, refresh_key: int) -> pd.DataFrame:
     day_count = max(1, int(days))
@@ -689,7 +638,6 @@ if "data_loaded_at" not in st.session_state:
 
 if st.session_state["data_cache"].get("df_raw") is None:
     df_raw, meta_fetched_at, google_fetched_at = load_main_data()
-    df_raw = _annotate_effective_delivery_status(df_raw)
     df_google_demo_raw = load_google_demo_data()
     st.session_state["data_cache"]["df_raw"] = df_raw
     st.session_state["data_cache"]["df_google_demo_raw"] = df_google_demo_raw
@@ -698,9 +646,6 @@ if st.session_state["data_cache"].get("df_raw") is None:
     st.session_state["data_loaded_at"] = datetime.now()
 else:
     df_raw = st.session_state["data_cache"]["df_raw"]
-    if not df_raw.empty and "Effective_Is_On" not in df_raw.columns:
-        df_raw = _annotate_effective_delivery_status(df_raw)
-        st.session_state["data_cache"]["df_raw"] = df_raw
     df_google_demo_raw = st.session_state["data_cache"]["df_google_demo_raw"]
     meta_fetched_at = st.session_state["data_cache"]["meta_fetched_at"]
     google_fetched_at = st.session_state["data_cache"]["google_fetched_at"]
@@ -815,13 +760,7 @@ if sel_grp != '전체' and (not df_filtered.empty):
 sel_crv = st.sidebar.multiselect("광고소재필터", crvs)
 
 status_opt = st.sidebar.radio("게재상태", ["전체", "게재중 (On)", "비게재 (Off)"], index=1)
-if "Effective_Is_On" in df_filtered.columns:
-    effective_on = df_filtered["Effective_Is_On"].fillna(False).astype(bool)
-    if status_opt == "게재중 (On)":
-        df_filtered = df_filtered[effective_on]
-    elif status_opt == "비게재 (Off)":
-        df_filtered = df_filtered[~effective_on]
-elif 'Status' in df_filtered.columns:
+if 'Status' in df_filtered.columns:
     if status_opt == "게재중 (On)":
         df_filtered = df_filtered[df_filtered['Status'].isin(['ACTIVE', 'On'])]
     elif status_opt == "비게재 (Off)":
@@ -900,7 +839,7 @@ def render_existing_dashboard() -> None:
         if st.session_state["actions_cache"] is None:
             st.session_state["actions_cache"] = load_actions()
         actions_df = st.session_state["actions_cache"]
-        # 진단 결과에 최신 상태 병합
+        # 진단 결과에 최신 Status 병합
         if "Status" in df_raw.columns:
             status_src = df_raw.copy()
             if "Date" in status_src.columns:
@@ -908,23 +847,16 @@ def render_existing_dashboard() -> None:
             status_latest = status_src.dropna(subset=["Status"]).groupby(
                 ["Campaign", "AdGroup", "Creative_ID"], as_index=False
             ).tail(1)
-            merge_cols = ["Campaign", "AdGroup", "Creative_ID", "Status"]
-            if "Effective_Is_On" in status_latest.columns:
-                merge_cols.append("Effective_Is_On")
-            if "Effective_Status" in status_latest.columns:
-                merge_cols.append("Effective_Status")
-            diag_res = diag_res.merge(status_latest[merge_cols], on=["Campaign", "AdGroup", "Creative_ID"], how="left")
-
+            diag_res = diag_res.merge(
+                status_latest[["Campaign", "AdGroup", "Creative_ID", "Status"]],
+                on=["Campaign", "AdGroup", "Creative_ID"],
+                how="left",
+            )
+    
         def _is_active_status(v: str) -> bool:
             return str(v).upper() in {"ACTIVE", "ON", "ENABLED"}
-
-        if "Effective_Is_On" in diag_res.columns:
-            diag_effective_on = diag_res["Effective_Is_On"].fillna(False).astype(bool)
-            if status_opt == "게재중 (On)":
-                diag_res = diag_res[diag_effective_on]
-            elif status_opt == "비게재 (Off)":
-                diag_res = diag_res[~diag_effective_on]
-        elif "Status" in diag_res.columns:
+    
+        if "Status" in diag_res.columns:
             if status_opt == "게재중 (On)":
                 diag_res = diag_res[diag_res["Status"].apply(_is_active_status)]
             elif status_opt == "비게재 (Off)":
@@ -1009,9 +941,7 @@ def render_existing_dashboard() -> None:
                     adgroup_name = str(r.get("AdGroup", "")).strip()
                     creative_key = creative_id if creative_id else f"{campaign_name}|{adgroup_name}"
                     is_inactive = False
-                    if "Effective_Is_On" in r and pd.notna(r.get("Effective_Is_On")):
-                        is_inactive = not bool(r.get("Effective_Is_On"))
-                    elif "Status" in r:
+                    if "Status" in r:
                         is_inactive = not _is_active_status(r.get("Status"))
                     inactive_color = "#9aa0a6"
                     title_color = inactive_color if is_inactive else "inherit"
