@@ -56,19 +56,6 @@ def _coerce_bool(val: Any) -> Any:
     return val
 
 
-def _normalize_google_status(value: Any) -> str:
-    if value is None:
-        return ""
-    name = getattr(value, "name", None)
-    if name:
-        return str(name).strip().upper()
-
-    text = str(value).strip().upper()
-    if "." in text:
-        text = text.split(".")[-1]
-    return text
-
-
 def build_google_ads_client() -> Optional["GoogleAdsClient"]:
     if GoogleAdsClient is None:
         return None
@@ -136,9 +123,9 @@ def fetch_google_ads_insights(
         for batch in stream:
             for row in batch.results:
                 cost_micros = row.metrics.cost_micros or 0
-                campaign_status = _normalize_google_status(row.campaign.status)
-                ad_group_status = _normalize_google_status(row.ad_group.status)
-                ad_status = _normalize_google_status(row.ad_group_ad.status)
+                campaign_status = str(row.campaign.status or "").strip().upper()
+                ad_group_status = str(row.ad_group.status or "").strip().upper()
+                ad_status = str(row.ad_group_ad.status or "").strip().upper()
                 is_on = (
                     campaign_status == "ENABLED"
                     and ad_group_status == "ENABLED"
