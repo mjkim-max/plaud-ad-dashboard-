@@ -25,7 +25,7 @@ from services.action_store import load_actions, upsert_action, delete_action
 # -----------------------------------------------------------------------------
 # [SETUP] 페이지 설정
 # -----------------------------------------------------------------------------
-st.set_page_config(page_title="광고 성과 관리 BI", page_icon=None, layout="wide")
+st.set_page_config(page_title="광고 성과 관리 BI", page_icon=None, layout="wide", initial_sidebar_state="collapsed")
 if go is None:
     st.error("plotly 패키지가 설치되어 있지 않습니다. 네트워크가 되는 환경에서 설치해 주세요.")
     st.code("/Users/kmj/Desktop/Cursor/venv/bin/pip install plotly", language="bash")
@@ -62,6 +62,8 @@ if "action_selected" not in st.session_state:
     st.session_state["action_selected"] = {}
 if "camp_loaded" not in st.session_state:
     st.session_state["camp_loaded"] = {}
+if "target_cpa_warning" not in st.session_state:
+    st.session_state["target_cpa_warning"] = 140000
 
 
 def _set_selected_date(cid: str, d_str: str) -> None:
@@ -163,39 +165,6 @@ else:
 
 # Meta 로드 건수 (필터 적용 전 기준, 진단/표시용)
 meta_row_count = int((df_raw["Platform"] == "Meta").sum()) if (not df_raw.empty and "Platform" in df_raw.columns) else len(df_raw)
-target_cpa_warning = 140000
-
-st.sidebar.header("설정")
-st.sidebar.caption("목표 CPA: 140,000원")
-st.sidebar.markdown("---")
-
-st.sidebar.header("필터 설정")
-
-# 데이터 업데이트 버튼
-if st.sidebar.button("데이터 업데이트"):
-    st.cache_data.clear()
-    st.session_state["data_cache"] = {}
-    st.session_state["data_loaded_at"] = None
-    st.rerun()
-
-# 데이터 로드 상태
-if meta_row_count == 0:
-    reason = diagnose_meta_no_data()
-    st.sidebar.error("**Meta 데이터 없음**")
-    st.sidebar.caption(reason)
-    st.sidebar.caption("💡 .env를 수정했다면 **Streamlit 중지 후 다시 실행**해야 반영됩니다.")
-    err = st.session_state.get("meta_api_error")
-    if err:
-        st.sidebar.error(err)
-else:
-    st.sidebar.caption(f"📊 Meta {meta_row_count:,}건 로드")
-
-if meta_fetched_at:
-    st.sidebar.caption("Meta 데이터 반영시점")
-    st.sidebar.caption(meta_fetched_at.strftime("%Y-%m-%d %H:%M:%S"))
-else:
-    st.sidebar.caption("Meta 데이터 반영시점")
-    st.sidebar.caption("데이터 없음")
 
 # 1. Main Data
 df_filtered = df_raw.copy()
@@ -207,9 +176,36 @@ def render_existing_dashboard() -> None:
     # 4. 메인 화면: 진단 리포트
     # -----------------------------------------------------------------------------
     st.title("광고 성과 관리 대시보드")
-    
+
+    ctrl_left, ctrl_mid, ctrl_right = st.columns([1.2, 4, 1.2])
+    with ctrl_left:
+        st.number_input("목표 CPA", min_value=0, step=1000, key="target_cpa_warning")
+    with ctrl_right:
+        st.markdown("<div style='height: 1.9rem;'></div>", unsafe_allow_html=True)
+        if st.button("데이터 업데이트", use_container_width=True):
+            st.cache_data.clear()
+            st.session_state["data_cache"] = {}
+            st.session_state["data_loaded_at"] = None
+            st.rerun()
+
+    target_cpa_warning = int(st.session_state["target_cpa_warning"])
+
+    if meta_row_count == 0:
+        reason = diagnose_meta_no_data()
+        st.error("Meta 데이터 없음")
+        st.caption(reason)
+        st.caption("`.env`를 수정했다면 Streamlit을 완전히 다시 실행해야 반영됩니다.")
+        err = st.session_state.get("meta_api_error")
+        if err:
+            st.error(err)
+    else:
+        status_txt = f"Meta {meta_row_count:,}건 로드"
+        if meta_fetched_at:
+            status_txt += f" | 반영시점 {meta_fetched_at.strftime('%Y-%m-%d %H:%M:%S')}"
+        st.caption(status_txt)
+
     st.subheader("1. 캠페인 성과 진단")
-    
+
     # 조치 내용 출력
     st.markdown("<div class='sec-divider'></div>", unsafe_allow_html=True)
     st.markdown("##### 조치 내용 출력")
