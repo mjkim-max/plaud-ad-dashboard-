@@ -1,7 +1,4 @@
-from datetime import datetime, timedelta, date
-import re
-from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -14,14 +11,9 @@ import traceback
 
 try:
     from services.data_loader import (
-        META_AD_ACCOUNT_ID,
         get_meta_token,
         load_main_data,
-        load_meta_from_api,
-        load_google_from_api,
-        load_google_demo_data,
         diagnose_meta_no_data,
-        get_meta_token_info,
     )
 except Exception:
     st.error("data_loader import failed")
@@ -29,7 +21,6 @@ except Exception:
     st.stop()
 from services.diagnosis import run_diagnosis
 from services.action_store import load_actions, upsert_action, delete_action
-from services.material_status_store import load_material_statuses, save_material_statuses
 
 # -----------------------------------------------------------------------------
 # [SETUP] 페이지 설정
@@ -55,32 +46,6 @@ st.markdown("""
     .tl-form {display: flex; align-items: center; gap: 8px;}
     .sec-divider {border-top: 1px solid #eef0f2; margin: 10px 0;}
     .v-divider {border-left: 1px solid #eef0f2; padding-left: 12px; height: 100%;}
-    /* 탭 라벨 가시성 강화 */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        border-bottom: 1px solid #d9d9d9;
-        padding-bottom: 6px;
-        margin-bottom: 8px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 42px;
-        background: #f4f6f8;
-        border: 1px solid #d0d7de;
-        border-radius: 10px;
-        padding: 0 16px;
-    }
-    .stTabs [data-baseweb="tab"] p {
-        font-size: 16px;
-        font-weight: 700;
-        color: #111827;
-    }
-    .stTabs [aria-selected="true"] {
-        background: #111827 !important;
-        border-color: #111827 !important;
-    }
-    .stTabs [aria-selected="true"] p {
-        color: #ffffff !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -106,101 +71,6 @@ def _set_selected_date(cid: str, d_str: str) -> None:
 
 
 _ACTIVE_STATUS = {"ACTIVE", "ON", "ENABLED", "RUNNING"}
-_MATERIAL_STATUS_LOOKBACK_DAYS = 180
-
-
-def _extract_first_url(text: str) -> str:
-    if not text:
-        return ""
-    m = re.search(r"(https?://[^\s]+)", str(text))
-    return m.group(1).strip() if m else ""
-
-
-def _normalize_material_url(raw_url: str) -> str:
-    """
-    동일 영상을 다른 URL(UTM/fbclid 등)로 쓰는 경우를 하나로 묶기 위한 정규화.
-    """
-    u = str(raw_url or "").strip()
-    if not u:
-        return ""
-    try:
-        s = urlsplit(u)
-        scheme = s.scheme.lower() if s.scheme else "https"
-        netloc = s.netloc.lower().strip()
-        if netloc.startswith("www."):
-            netloc = netloc[4:]
-        if netloc.startswith("m."):
-            netloc = netloc[2:]
-
-        # 추적 파라미터 제거, 영상 식별에 쓸만한 최소 파라미터만 유지
-        keep_keys = {"v", "video_id", "id"}
-        q = [(k, v) for k, v in parse_qsl(s.query, keep_blank_values=False) if k in keep_keys]
-        query = urlencode(q, doseq=True)
-
-        path = s.path.rstrip("/") or "/"
-        return urlunsplit((scheme, netloc, path, query, ""))
-    except Exception:
-        return u
-
-
-def _extract_meta_video_id_from_url(raw_url: str) -> str:
-    u = _normalize_material_url(raw_url)
-    if not u:
-        return ""
-    try:
-        s = urlsplit(u)
-        query_pairs = parse_qsl(s.query, keep_blank_values=False)
-        query_map = {k: v for k, v in query_pairs if v}
-        for key in ("v", "video_id"):
-            if query_map.get(key):
-                return str(query_map[key]).strip()
-
-        parts = [p for p in s.path.split("/") if p]
-        for idx, part in enumerate(parts):
-            if part in {"videos", "reel"} and idx + 1 < len(parts):
-                cand = str(parts[idx + 1]).strip()
-                if cand:
-                    return cand
-
-        if len(parts) >= 2 and parts[-2] == "videos":
-            return str(parts[-1]).strip()
-    except Exception:
-        return ""
-    return ""
-
-
-def _make_meta_material_key(
-    *,
-    video_url: str = "",
-    video_id: str = "",
-    story_id: str = "",
-    creative_id: str = "",
-    ad_id: str = "",
-    fallback_name: str = "",
-) -> str:
-    clean_video_id = str(video_id or "").strip()
-    url_video_id = _extract_meta_video_id_from_url(video_url)
-    canonical_video_id = clean_video_id or url_video_id
-    if canonical_video_id:
-        return f"video_id:{canonical_video_id}"
-
-    clean_story_id = str(story_id or "").strip()
-    if clean_story_id:
-        return f"story_id:{clean_story_id}"
-
-    normalized_url = _normalize_material_url(video_url)
-    if normalized_url:
-        return normalized_url
-
-    clean_creative_id = str(creative_id or "").strip()
-    if clean_creative_id:
-        return f"creative_id:{clean_creative_id}"
-
-    clean_ad_id = str(ad_id or "").strip()
-    if clean_ad_id:
-        return f"ad_id:{clean_ad_id}"
-
-    return f"name:{str(fallback_name or '').strip() or '이름 없음'}"
 
 
 def _is_active_status_value(raw: str) -> bool:
@@ -259,38 +129,6 @@ def _annotate_effective_delivery_status(df_src: pd.DataFrame) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=1800)
-def _load_material_status_source_cached(days: int, refresh_key: int) -> pd.DataFrame:
-    day_count = max(1, int(days))
-    today = datetime.now().date()
-    since = (today - timedelta(days=day_count - 1)).isoformat()
-    until = today.isoformat()
-
-    frames = []
-
-    try:
-        df_meta = _load_meta_long_range_cached(day_count, refresh_key)
-        if df_meta is not None and not df_meta.empty:
-            frames.append(df_meta.copy())
-    except Exception:
-        pass
-
-    try:
-        df_google = load_google_from_api(since=since, until=until)
-        if df_google is not None and not df_google.empty:
-            frames.append(df_google.copy())
-    except Exception:
-        pass
-
-    if not frames:
-        return pd.DataFrame()
-
-    out = pd.concat(frames, ignore_index=True)
-    if "Date" in out.columns:
-        out["Date"] = pd.to_datetime(out["Date"], errors="coerce")
-    return out
-
-
-@st.cache_data(ttl=1800)
 def _fetch_meta_video_assets_cached(ad_ids: tuple) -> dict:
     if not ad_ids:
         return {}
@@ -302,385 +140,6 @@ def _fetch_meta_video_assets_cached(ad_ids: tuple) -> dict:
         return fetch_ad_video_assets(list(ad_ids), token=get_meta_token())
     except Exception:
         return {}
-
-
-@st.cache_data(ttl=1800)
-def _load_meta_long_range_cached(days: int, refresh_key: int) -> pd.DataFrame:
-    day_count = max(1, int(days))
-    today = datetime.now().date()
-    start = today - timedelta(days=day_count - 1)
-
-    # 영상 상태 탭은 breakdown 없이 가볍게, 기간을 나눠서 누락 최소화
-    try:
-        from meta_api import fetch_insights
-    except Exception:
-        since = start.isoformat()
-        until = today.isoformat()
-        return load_meta_from_api(since=since, until=until)
-
-    rows = []
-    cursor = start
-    chunk_days = 30
-    fail_count = 0
-    while cursor <= today:
-        chunk_end = min(cursor + timedelta(days=chunk_days - 1), today)
-        try:
-            raw = fetch_insights(
-                META_AD_ACCOUNT_ID,
-                since=cursor.isoformat(),
-                until=chunk_end.isoformat(),
-                token=get_meta_token(),
-                level="ad",
-                use_breakdowns=False,
-                max_pages=200,
-            )
-            fail_count = 0
-        except Exception:
-            raw = []
-            fail_count += 1
-            if fail_count >= 3:
-                break
-
-        for r in raw:
-            rows.append(
-                {
-                    "Date": r.get("date_start") or cursor.isoformat(),
-                    "Campaign": r.get("campaign_name") or r.get("name") or "",
-                    "AdGroup": r.get("adset_name") or "",
-                    "Creative_ID": r.get("ad_name") or r.get("ad_id") or "",
-                    "Ad_ID": r.get("ad_id") or "",
-                    "Status": "Unknown",
-                    "Platform": "Meta",
-                }
-            )
-
-        cursor = chunk_end + timedelta(days=1)
-
-    if not rows:
-        return pd.DataFrame()
-
-    out = pd.DataFrame(rows)
-    out["Date"] = pd.to_datetime(out["Date"], errors="coerce")
-    out = out.dropna(subset=["Date"])
-    if out.empty:
-        return out
-
-    dedupe_cols = [c for c in ["Date", "Ad_ID", "Creative_ID", "Campaign", "AdGroup"] if c in out.columns]
-    if dedupe_cols:
-        out = out.sort_values("Date").drop_duplicates(subset=dedupe_cols, keep="last")
-    return out.reset_index(drop=True)
-
-
-def _build_video_status_lists(df_meta: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    base_cols = ["소재명", "최신사용일", "캠페인", "광고그룹", "ad_id", "video_key"]
-    empty = pd.DataFrame(columns=base_cols)
-
-    if df_meta is None or df_meta.empty:
-        return empty, empty
-
-    work = df_meta.copy()
-    if "Platform" in work.columns:
-        work = work[work["Platform"] == "Meta"].copy()
-    if work.empty:
-        return empty, empty
-
-    for col, default in (
-        ("Date", pd.NaT),
-        ("Ad_ID", ""),
-        ("Creative_ID", ""),
-        ("Campaign", ""),
-        ("AdGroup", ""),
-        ("Status", "Unknown"),
-    ):
-        if col not in work.columns:
-            work[col] = default
-
-    work["Date"] = pd.to_datetime(work["Date"], errors="coerce")
-    work = work.dropna(subset=["Date"])
-    if work.empty:
-        return empty, empty
-
-    work["ad_id"] = work["Ad_ID"].astype(str).str.strip()
-    work["소재명"] = work["Creative_ID"].astype(str).str.strip().replace("", "이름 없음")
-    work["캠페인"] = work["Campaign"].astype(str).str.strip()
-    work["광고그룹"] = work["AdGroup"].astype(str).str.strip()
-    work["status"] = work["Status"].astype(str).str.upper().str.strip().replace("", "UNKNOWN")
-
-    ad_ids = sorted({v for v in work["ad_id"].tolist() if v and v.lower() != "nan"})
-    if ad_ids:
-        asset_map = _fetch_meta_video_assets_cached(tuple(ad_ids))
-    else:
-        asset_map = {}
-
-    work["video_url"] = work["ad_id"].map(lambda x: str((asset_map.get(str(x)) or {}).get("video_url") or "").strip())
-    work["video_id"] = work["ad_id"].map(lambda x: str((asset_map.get(str(x)) or {}).get("video_id") or "").strip())
-    work["ad_status"] = work["ad_id"].map(lambda x: str((asset_map.get(str(x)) or {}).get("ad_status") or "").upper().strip())
-    work["adset_status"] = work["ad_id"].map(lambda x: str((asset_map.get(str(x)) or {}).get("adset_status") or "").upper().strip())
-    work["campaign_status"] = work["ad_id"].map(lambda x: str((asset_map.get(str(x)) or {}).get("campaign_status") or "").upper().strip())
-
-    # API 상태가 비어 있으면 기존 status를 ad_status fallback으로 사용
-    work["ad_status"] = work["ad_status"].replace("", np.nan).fillna(work["status"])
-
-    # '광고 + 광고그룹 + 캠페인' 모두 활성일 때만 운영 중
-    work["is_all_on"] = (
-        work["ad_status"].apply(_is_active_status_value)
-        & work["adset_status"].apply(_is_active_status_value)
-        & work["campaign_status"].apply(_is_active_status_value)
-    )
-
-    work["video_url"] = work.apply(lambda r: r["video_url"] or _extract_first_url(r["소재명"]), axis=1)
-    work["video_url"] = work["video_url"].apply(_normalize_material_url)
-
-    def _video_key(row) -> str:
-        return _make_meta_material_key(
-            video_url=row["video_url"],
-            video_id=row["video_id"],
-            ad_id=row["ad_id"],
-            fallback_name=row["소재명"],
-        )
-
-    work["video_key"] = work.apply(_video_key, axis=1)
-    work = work.sort_values("Date")
-
-    rows = []
-    for video_key, g in work.groupby("video_key", dropna=False):
-        g = g.sort_values("Date")
-        latest = g.iloc[-1]
-        names = [str(v).strip() for v in g["소재명"].tolist() if str(v).strip()]
-        uniq_names = list(dict.fromkeys(names))
-        latest_name = str(latest["소재명"]).strip() or "이름 없음"
-        name_summary = latest_name if len(uniq_names) <= 1 else f"{latest_name} (외 {len(uniq_names) - 1}건)"
-
-        is_active = bool(g["is_all_on"].any())
-        rows.append(
-            {
-                "상태": "운영 중" if is_active else "꺼진 소재",
-                "소재명": name_summary,
-                "최신사용일": latest["Date"].date(),
-                "캠페인": str(latest["캠페인"]),
-                "광고그룹": str(latest["광고그룹"]),
-                "ad_id": str(latest["ad_id"]),
-                "video_key": str(video_key),
-            }
-        )
-
-    if not rows:
-        return empty, empty
-
-    out = pd.DataFrame(rows).sort_values("최신사용일", ascending=False)
-    active_df = out[out["상태"] == "운영 중"][base_cols].reset_index(drop=True)
-    paused_df = out[out["상태"] == "꺼진 소재"][base_cols].reset_index(drop=True)
-    return active_df, paused_df
-
-
-def _status_to_label(raw: str) -> str:
-    s = str(raw or "").strip().upper()
-    if any(k in s for k in ("ACTIVE", "ON", "ENABLED", "RUNNING", "운영", "켜")):
-        return "운영 중"
-    if any(k in s for k in ("OFF", "PAUSED", "DISABLED", "중지", "꺼", "STOP")):
-        return "꺼진 소재"
-    return "꺼진 소재"
-
-
-def _collapse_material_status_rows(df_src: pd.DataFrame) -> pd.DataFrame:
-    cols = ["platform", "campaign", "adgroup", "material_name", "status", "last_seen_date", "updated_at"]
-    if df_src is None or df_src.empty:
-        return pd.DataFrame(columns=cols)
-
-    work = df_src.copy()
-    for c in cols:
-        if c not in work.columns:
-            work[c] = ""
-
-    work["platform"] = work["platform"].astype(str).str.strip()
-    work["material_name"] = work["material_name"].astype(str).str.strip().replace("", "이름 없음")
-    work["status"] = work["status"].astype(str).apply(_status_to_label)
-    work["last_seen_dt"] = pd.to_datetime(work["last_seen_date"], errors="coerce")
-    work["updated_dt"] = pd.to_datetime(work["updated_at"], errors="coerce")
-
-    rows = []
-    grp_cols = ["platform", "material_name"]
-    for _, g in work.groupby(grp_cols, dropna=False):
-        g = g.sort_values(["last_seen_dt", "updated_dt"], ascending=[True, True], na_position="last")
-        latest = g.iloc[-1]
-        rows.append(
-            {
-                "platform": str(latest["platform"]),
-                "campaign": str(latest["campaign"]),
-                "adgroup": str(latest["adgroup"]),
-                "material_name": str(latest["material_name"]),
-                "status": "운영 중" if (g["status"] == "운영 중").any() else "꺼진 소재",
-                "last_seen_date": str(latest["last_seen_date"]),
-                "updated_at": str(latest["updated_at"]),
-            }
-        )
-
-    out = pd.DataFrame(rows, columns=cols)
-    if out.empty:
-        return out
-    out["last_seen_dt"] = pd.to_datetime(out["last_seen_date"], errors="coerce")
-    out = out.sort_values(["platform", "status", "last_seen_dt"], ascending=[True, True, False], na_position="last")
-    return out[cols].reset_index(drop=True)
-
-
-def _build_status_rows_from_df(df_src: pd.DataFrame) -> pd.DataFrame:
-    cols = ["platform", "campaign", "adgroup", "material_name", "status", "last_seen_date", "updated_at"]
-    if df_src is None or df_src.empty:
-        return pd.DataFrame(columns=cols)
-
-    work = df_src.copy()
-    for c, default in (
-        ("Platform", "Unknown"),
-        ("Campaign", ""),
-        ("AdGroup", ""),
-        ("Creative_ID", ""),
-        ("Ad_ID", ""),
-        ("Status", ""),
-        ("Date", pd.NaT),
-    ):
-        if c not in work.columns:
-            work[c] = default
-
-    work["Date"] = pd.to_datetime(work["Date"], errors="coerce")
-    work = work[work["Date"].notna()].copy()
-    if work.empty:
-        return pd.DataFrame(columns=cols)
-
-    work["platform"] = work["Platform"].astype(str).str.strip().replace("", "Unknown")
-    work["campaign"] = work["Campaign"].astype(str).str.strip()
-    work["adgroup"] = work["AdGroup"].astype(str).str.strip()
-    work["material_name"] = work["Creative_ID"].astype(str).str.strip().replace("", "이름 없음")
-    work["ad_id"] = work["Ad_ID"].astype(str).str.strip()
-    work["status_raw"] = work["Status"].astype(str).str.upper().str.strip()
-    work["is_on"] = work["status_raw"].apply(_is_active_status_value)
-    work["material_key"] = work["material_name"].astype(str).apply(lambda x: f"name:{x}")
-    work["last_seen_date"] = work["Date"].dt.date.astype(str)
-
-    # Meta는 이름이 바뀌어도 같은 링크(video_url/video_id)면 같은 소재로 묶는다.
-    meta_mask = work["platform"].astype(str).str.upper() == "META"
-    meta_rows = work[meta_mask].copy()
-    if not meta_rows.empty:
-        ad_ids = sorted({v for v in meta_rows["ad_id"].tolist() if v and v.lower() != "nan"})
-        asset_map = _fetch_meta_video_assets_cached(tuple(ad_ids)) if ad_ids else {}
-
-        meta_rows["video_url"] = meta_rows["ad_id"].map(lambda x: str((asset_map.get(str(x)) or {}).get("video_url") or "").strip())
-        meta_rows["video_id"] = meta_rows["ad_id"].map(lambda x: str((asset_map.get(str(x)) or {}).get("video_id") or "").strip())
-        meta_rows["story_id"] = meta_rows["ad_id"].map(lambda x: str((asset_map.get(str(x)) or {}).get("story_id") or "").strip())
-        meta_rows["creative_id"] = meta_rows["ad_id"].map(lambda x: str((asset_map.get(str(x)) or {}).get("creative_id") or "").strip())
-        meta_rows["ad_status"] = meta_rows["ad_id"].map(lambda x: str((asset_map.get(str(x)) or {}).get("ad_status") or "").upper().strip())
-        meta_rows["adset_status"] = meta_rows["ad_id"].map(lambda x: str((asset_map.get(str(x)) or {}).get("adset_status") or "").upper().strip())
-        meta_rows["campaign_status"] = meta_rows["ad_id"].map(lambda x: str((asset_map.get(str(x)) or {}).get("campaign_status") or "").upper().strip())
-
-        meta_rows["ad_status"] = meta_rows["ad_status"].replace("", np.nan).fillna(meta_rows["status_raw"])
-        meta_rows["is_on"] = (
-            meta_rows["ad_status"].apply(_is_active_status_value)
-            & meta_rows["adset_status"].apply(_is_active_status_value)
-            & meta_rows["campaign_status"].apply(_is_active_status_value)
-        )
-
-        meta_rows["video_url"] = meta_rows["video_url"].apply(_normalize_material_url)
-
-        def _meta_key(r) -> str:
-            return _make_meta_material_key(
-                video_url=r["video_url"],
-                video_id=r["video_id"],
-                story_id=r["story_id"],
-                creative_id=r["creative_id"],
-                ad_id=r["ad_id"],
-                fallback_name=r["material_name"],
-            )
-
-        meta_rows["material_key"] = meta_rows.apply(_meta_key, axis=1)
-        work.loc[meta_rows.index, "material_key"] = meta_rows["material_key"]
-        work.loc[meta_rows.index, "is_on"] = meta_rows["is_on"]
-
-    rows = []
-    # 동일 소재 판별은 플랫폼+소재키 기준으로 통합 (캠페인/광고그룹이 달라도 같은 소재면 1건)
-    grp_cols = ["platform", "material_key"]
-    for _, g in work.groupby(grp_cols, dropna=False):
-        g = g.sort_values("Date")
-        latest = g.iloc[-1]
-        names = [str(v).strip() for v in g["material_name"].tolist() if str(v).strip()]
-        uniq_names = list(dict.fromkeys(names))
-        latest_name = str(latest["material_name"]).strip() or "이름 없음"
-        name_summary = latest_name if len(uniq_names) <= 1 else f"{latest_name} (외 {len(uniq_names) - 1}건)"
-
-        rows.append(
-            {
-                "platform": str(latest["platform"]),
-                "campaign": str(latest["campaign"]),
-                "adgroup": str(latest["adgroup"]),
-                "material_name": name_summary,
-                "status": "운영 중" if bool(g["is_on"].any()) else "꺼진 소재",
-                "last_seen_date": str(latest["last_seen_date"]),
-                "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            }
-        )
-
-    if not rows:
-        return pd.DataFrame(columns=cols)
-    out = pd.DataFrame(rows)
-    return out[cols].sort_values(["platform", "status", "last_seen_date"], ascending=[True, True, False]).reset_index(drop=True)
-
-
-def render_video_material_tab() -> None:
-    st.title("소재 ON/OFF 상태 (스프레드시트)")
-    st.caption(f"시트 기준으로 표시합니다. `소재 상태 업데이트`를 누르면 최근 {_MATERIAL_STATUS_LOOKBACK_DAYS}일 데이터를 다시 계산합니다.")
-
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        refresh_sheet = st.button("시트 새로고침", key="sheet_refresh_btn")
-    with c2:
-        rebuild_sheet = st.button("소재 상태 업데이트", key="sheet_rebuild_btn")
-
-    platform_filter = st.radio(
-        "플랫폼",
-        ["Meta", "Google"],
-        horizontal=True,
-        key="sheet_platform_filter_v2",
-    )
-
-    if rebuild_sheet:
-        refresh_key = int(datetime.now().timestamp())
-        base_df = _load_material_status_source_cached(_MATERIAL_STATUS_LOOKBACK_DAYS, refresh_key)
-        rows_df = _build_status_rows_from_df(base_df)
-        saved = save_material_statuses(rows_df)
-        st.success(f"시트 업데이트 완료: {saved}건")
-
-    if refresh_sheet:
-        st.rerun()
-
-    df_sheet = load_material_statuses()
-    if df_sheet.empty:
-        st.info("시트에 소재 상태 데이터가 없습니다. `소재 상태 업데이트`를 먼저 실행해 주세요.")
-        return
-
-    for c in ("platform", "campaign", "adgroup", "material_name", "status", "last_seen_date", "updated_at"):
-        if c not in df_sheet.columns:
-            df_sheet[c] = ""
-
-    df_sheet["status"] = df_sheet["status"].astype(str).apply(_status_to_label)
-    df_sheet = _collapse_material_status_rows(df_sheet)
-    df_sheet = df_sheet[df_sheet["platform"].astype(str) == platform_filter]
-
-    active_df = df_sheet[df_sheet["status"] == "운영 중"].copy()
-    paused_df = df_sheet[df_sheet["status"] == "꺼진 소재"].copy()
-
-    k1, k2 = st.columns(2)
-    k1.metric("운영 중 소재", f"{len(active_df):,}")
-    k2.metric("꺼진 소재", f"{len(paused_df):,}")
-
-    view_cols = ["campaign", "adgroup", "material_name", "last_seen_date", "updated_at"]
-    left, right = st.columns(2)
-    with left:
-        st.markdown("#### 운영 중 소재")
-        st.dataframe(active_df[view_cols], use_container_width=True, hide_index=True)
-    with right:
-        st.markdown("#### 꺼진 소재")
-        st.dataframe(paused_df[view_cols], use_container_width=True, hide_index=True)
-
-
-
 # -----------------------------------------------------------------------------
 # 3. 사이드바 & 데이터 준비
 # -----------------------------------------------------------------------------
@@ -690,62 +149,27 @@ if "data_loaded_at" not in st.session_state:
     st.session_state["data_loaded_at"] = None
 
 if st.session_state["data_cache"].get("df_raw") is None:
-    df_raw, meta_fetched_at, google_fetched_at = load_main_data()
+    df_raw, meta_fetched_at, _ = load_main_data()
     df_raw = _annotate_effective_delivery_status(df_raw)
-    df_google_demo_raw = load_google_demo_data()
     st.session_state["data_cache"]["df_raw"] = df_raw
-    st.session_state["data_cache"]["df_google_demo_raw"] = df_google_demo_raw
     st.session_state["data_cache"]["meta_fetched_at"] = meta_fetched_at
-    st.session_state["data_cache"]["google_fetched_at"] = google_fetched_at
     st.session_state["data_loaded_at"] = datetime.now()
 else:
     df_raw = st.session_state["data_cache"]["df_raw"]
     if not df_raw.empty and "Effective_Is_On" not in df_raw.columns:
         df_raw = _annotate_effective_delivery_status(df_raw)
         st.session_state["data_cache"]["df_raw"] = df_raw
-    df_google_demo_raw = st.session_state["data_cache"]["df_google_demo_raw"]
     meta_fetched_at = st.session_state["data_cache"]["meta_fetched_at"]
-    google_fetched_at = st.session_state["data_cache"]["google_fetched_at"]
 
 # Meta 로드 건수 (필터 적용 전 기준, 진단/표시용)
-meta_row_count = int((df_raw["Platform"] == "Meta").sum()) if (not df_raw.empty and "Platform" in df_raw.columns) else 0
-google_row_count = int((df_raw["Platform"] == "Google").sum()) if (not df_raw.empty and "Platform" in df_raw.columns) else 0
+meta_row_count = int((df_raw["Platform"] == "Meta").sum()) if (not df_raw.empty and "Platform" in df_raw.columns) else len(df_raw)
+target_cpa_warning = 140000
 
-st.sidebar.header("목표 설정")
-target_cpa_warning = st.sidebar.number_input("목표 CPA", value=100000, step=1000)
-st.sidebar.markdown("---")
-
-st.sidebar.header("기간 설정")
-preset = st.sidebar.selectbox(
-    "기간선택",
-    ["오늘", "어제", "최근 3일", "최근 7일", "최근 14일", "최근 30일", "이번 달", "지난 달", "최근 90일", "전체 기간"],
-    index=4
-)
-today = datetime.now().date()
-
-# [중요] 사용자가 데이터를 2025년과 2026년을 섞어서 넣었으므로, 기본 날짜 계산을 유연하게
-if preset == "오늘": s, e = today, today
-elif preset == "어제": s = today - timedelta(days=1); e = s
-elif preset == "최근 3일": s = today - timedelta(days=2); e = today
-elif preset == "최근 7일": s = today - timedelta(days=6); e = today
-elif preset == "최근 14일": s = today - timedelta(days=13); e = today
-elif preset == "최근 30일": s = today - timedelta(days=29); e = today
-elif preset == "최근 90일": s = today - timedelta(days=89); e = today
-elif preset == "이번 달": s = date(today.year, today.month, 1); e = today
-elif preset == "지난 달":
-    first = date(today.year, today.month, 1); e = first - timedelta(days=1); s = date(e.year, e.month, 1)
-elif preset == "전체 기간": s = date(2020, 1, 1); e = today  # 충분히 넓게
-
-date_range = st.sidebar.date_input("날짜범위", [s, e])
+st.sidebar.header("설정")
+st.sidebar.caption("목표 CPA: 140,000원")
 st.sidebar.markdown("---")
 
 st.sidebar.header("필터 설정")
-c_m, c_g = st.sidebar.columns(2)
-sel_pl = []
-if c_m.checkbox("Meta", True): sel_pl.append("Meta")
-if c_g.checkbox("Google", True): sel_pl.append("Google")
-if 'Platform' in df_raw.columns:
-    df_raw = df_raw[df_raw['Platform'].isin(sel_pl)]
 
 # 데이터 업데이트 버튼
 if st.sidebar.button("데이터 업데이트"):
@@ -754,8 +178,8 @@ if st.sidebar.button("데이터 업데이트"):
     st.session_state["data_loaded_at"] = None
     st.rerun()
 
-# 데이터 로드 상태 (Meta가 선택됐는데 0건이면 원인 진단 후 안내)
-if "Meta" in sel_pl and meta_row_count == 0:
+# 데이터 로드 상태
+if meta_row_count == 0:
     reason = diagnose_meta_no_data()
     st.sidebar.error("**Meta 데이터 없음**")
     st.sidebar.caption(reason)
@@ -763,76 +187,19 @@ if "Meta" in sel_pl and meta_row_count == 0:
     err = st.session_state.get("meta_api_error")
     if err:
         st.sidebar.error(err)
-elif meta_row_count > 0:
-    st.sidebar.caption(f"📊 Meta {meta_row_count:,}건 / Google {google_row_count:,}건 로드")
+else:
+    st.sidebar.caption(f"📊 Meta {meta_row_count:,}건 로드")
 
-if "Meta" in sel_pl:
-    if meta_fetched_at:
-        st.sidebar.caption("Meta 데이터 반영시점")
-        st.sidebar.caption(meta_fetched_at.strftime("%Y-%m-%d %H:%M:%S"))
-    else:
-        st.sidebar.caption("Meta 데이터 반영시점")
-        st.sidebar.caption("데이터 없음")
+if meta_fetched_at:
+    st.sidebar.caption("Meta 데이터 반영시점")
+    st.sidebar.caption(meta_fetched_at.strftime("%Y-%m-%d %H:%M:%S"))
+else:
+    st.sidebar.caption("Meta 데이터 반영시점")
+    st.sidebar.caption("데이터 없음")
 
-
-if "Google" in sel_pl:
-    if google_fetched_at:
-        st.sidebar.caption("Google 데이터 반영시점")
-        st.sidebar.caption(google_fetched_at.strftime("%Y-%m-%d %H:%M:%S"))
-    else:
-        st.sidebar.caption("Google 데이터 반영시점")
-        st.sidebar.caption("데이터 없음")
-        err = None
-        try:
-            err = st.session_state.get("google_api_error")
-        except Exception:
-            err = None
-        if err:
-            st.sidebar.error(err)
-
-# 1. Main Data 필터링
+# 1. Main Data
 df_filtered = df_raw.copy()
-if len(date_range) == 2 and not df_filtered.empty and 'Date' in df_filtered.columns:
-    df_filtered = df_filtered[(df_filtered['Date'].dt.date >= date_range[0]) & (df_filtered['Date'].dt.date <= date_range[1])]
-
-# 2. Google Demo Data 필터링
-df_google_demo_filtered = df_google_demo_raw.copy()
-if not df_google_demo_filtered.empty and 'Date' in df_google_demo_filtered.columns and len(date_range) == 2:
-    df_google_demo_filtered = df_google_demo_filtered[
-        (df_google_demo_filtered['Date'].dt.date >= date_range[0]) &
-        (df_google_demo_filtered['Date'].dt.date <= date_range[1])
-    ]
-
-camps = ['전체'] + sorted(df_filtered['Campaign'].unique().tolist()) if (not df_filtered.empty and 'Campaign' in df_filtered.columns) else ['전체']
-sel_camp = st.sidebar.selectbox("캠페인필터", camps)
-
-grps = ['전체']
-if sel_camp != '전체' and (not df_filtered.empty):
-    grps = ['전체'] + sorted(df_filtered[df_filtered['Campaign'] == sel_camp]['AdGroup'].unique().tolist())
-sel_grp = st.sidebar.selectbox("광고그룹필터", grps)
-
-crvs = []
-if sel_grp != '전체' and (not df_filtered.empty):
-    crvs = sorted(df_filtered[df_filtered['AdGroup'] == sel_grp]['Creative_ID'].unique().tolist())
-sel_crv = st.sidebar.multiselect("광고소재필터", crvs)
-
-status_opt = st.sidebar.radio("게재상태", ["전체", "게재중 (On)", "비게재 (Off)"], index=1)
-if "Effective_Is_On" in df_filtered.columns:
-    effective_on = df_filtered["Effective_Is_On"].fillna(False).astype(bool)
-    if status_opt == "게재중 (On)":
-        df_filtered = df_filtered[effective_on]
-    elif status_opt == "비게재 (Off)":
-        df_filtered = df_filtered[~effective_on]
-elif 'Status' in df_filtered.columns:
-    if status_opt == "게재중 (On)":
-        df_filtered = df_filtered[df_filtered['Status'].isin(['ACTIVE', 'On'])]
-    elif status_opt == "비게재 (Off)":
-        df_filtered = df_filtered[~df_filtered['Status'].isin(['ACTIVE', 'On'])]
-
 target_df = df_filtered.copy()
-if sel_camp != '전체': target_df = target_df[target_df['Campaign'] == sel_camp]
-if sel_grp != '전체': target_df = target_df[target_df['AdGroup'] == sel_grp]
-if sel_crv: target_df = target_df[target_df['Creative_ID'].isin(sel_crv)]
 
 # -----------------------------------------------------------------------------
 
@@ -920,18 +287,6 @@ def render_existing_dashboard() -> None:
         def _is_active_status(v: str) -> bool:
             return str(v).upper() in {"ACTIVE", "ON", "ENABLED"}
 
-        if "Effective_Is_On" in diag_res.columns:
-            diag_effective_on = diag_res["Effective_Is_On"].fillna(False).astype(bool)
-            if status_opt == "게재중 (On)":
-                diag_res = diag_res[diag_effective_on]
-            elif status_opt == "비게재 (Off)":
-                diag_res = diag_res[~diag_effective_on]
-        elif "Status" in diag_res.columns:
-            if status_opt == "게재중 (On)":
-                diag_res = diag_res[diag_res["Status"].apply(_is_active_status)]
-            elif status_opt == "비게재 (Off)":
-                diag_res = diag_res[~diag_res["Status"].apply(_is_active_status)]
-    
         camp_grps = diag_res.groupby('Campaign')
         sorted_camps = []
 
@@ -973,9 +328,6 @@ def render_existing_dashboard() -> None:
         sorted_camps.sort(key=lambda x: x['prio'])
     
         for item in sorted_camps:
-            if sel_camp != '전체' and item['name'] != sel_camp:
-                continue
-    
             with st.expander(f"{item['color']}[{item['header']}]", expanded=False):
                 st.markdown("##### 캠페인 기간별 성과 요약")
                 c_today, c_3d, c_7d, c_14d = st.columns(4)
@@ -1291,26 +643,12 @@ def render_existing_dashboard() -> None:
                 trend_df = trend_df[trend_df['AdGroup'] == target_adgroup]
             if target_campaign:
                 trend_df = trend_df[trend_df['Campaign'] == target_campaign]
-    
+
         sel_row = trend_df
         if not sel_row.empty:
-            platform = sel_row['Platform'].iloc[0]
-            current_adgroup = target_adgroup if target_adgroup else sel_row['AdGroup'].iloc[0]
-    
-            if platform == 'Google':
-                if not df_google_demo_filtered.empty:
-                    demog_df = df_google_demo_filtered[df_google_demo_filtered['AdGroup'] == current_adgroup]
-    
-                    if demog_df.empty:
-                        st.warning(f"⚠️ '{current_adgroup}' 광고그룹 데이터가 하단 시트에 없습니다. 날짜범위({date_range[0]}~{date_range[1]})가 맞는지 확인해주세요. (시트 날짜: 2025년 / 현재 선택: 2026년 가능성)")
-                    else:
-                        st.info(f"🔎 **'{target_creative}'** (구글) 분석 중. 인구통계는 **'{current_adgroup}'** 광고그룹 전체 기준입니다.")
-                else:
-                    st.warning("구글 인구통계 데이터가 날짜 필터링에 의해 모두 제외되었습니다. 기간 설정을 확인해주세요.")
-            else:
-                demog_df = trend_df
-                st.info(f"🔎 현재 **'{target_creative}'** 소재를 집중 분석 중입니다.")
-    
+            demog_df = trend_df
+            st.info(f"🔎 현재 **'{target_creative}'** 소재를 집중 분석 중입니다.")
+
         is_specific = True
     
         # 날짜 필터로 인해 비어있는 경우, 전체 데이터에서 재시도
@@ -1446,11 +784,4 @@ def render_existing_dashboard() -> None:
     else:
         st.warning("설정된 기간 내에 데이터가 없습니다.")
 
-st.markdown("### 화면 탭")
-tab_main, tab_new = st.tabs(["1) 기존 대시보드", "2) 신규 탭"])
-
-with tab_main:
-    render_existing_dashboard()
-
-with tab_new:
-    render_video_material_tab()
+render_existing_dashboard()

@@ -1,5 +1,4 @@
 import os
-import json
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
@@ -27,20 +26,9 @@ except Exception:  # optional dependency
             return False
 
 from services.meta_parser import parse_meta_actions, parse_meta_action_values
-from services.google_ads_service import (
-    build_google_ads_client,
-    check_google_ads_customer,
-    fetch_google_ads_insights,
-    list_accessible_customers,
-)
-
 # .env를 프로젝트 루트(app.py 있는 폴더)에서 로드
 _env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(_env_path)
-
-# [주소 설정] (원본 그대로)
-GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1jEB4zTYPb2mrxZGXriju6RymHo1nEMC8QIVzqgiHwdg/edit?gid=141038195#gid=141038195"
-GOOGLE_DEMO_SHEET_URL = "https://docs.google.com/spreadsheets/d/17z8PyqTdVFyF4QuTUKe6b0T_acWw2QbfvUP8DnTo5LM/edit?gid=29934845#gid=29934845"
 
 # Meta 광고계정 ID (환경변수 우선)
 def _get_meta_token() -> str:
@@ -98,19 +86,6 @@ def get_meta_token() -> str:
 
 # Meta 광고계정 ID (환경변수/Secrets 우선)
 META_AD_ACCOUNT_ID = _get_meta_ad_account_id()
-GOOGLE_ADS_CUSTOMER_ID = os.getenv("GOOGLE_ADS_CUSTOMER_ID", "")
-
-
-def convert_google_sheet_url(url):
-    try:
-        if "/edit" in url:
-            base_url = url.split("/edit")[0]
-            if "gid=" in url:
-                gid = url.split("gid=")[1].split("#")[0]
-                return f"{base_url}/export?format=csv&gid={gid}"
-        return url
-    except:
-        return url
 
 
 @st.cache_data(ttl=600)
@@ -208,90 +183,6 @@ def load_meta_from_api(since: str, until: str):
     return df
 
 
-@st.cache_data(ttl=600)
-def load_google_from_api(since: str, until: str):
-    """
-    Google Ads API로 인사이트 조회 후 앱 형식 DataFrame 반환.
-    since/until: YYYY-MM-DD. 캐시 10분.
-    """
-    customer_id = GOOGLE_ADS_CUSTOMER_ID
-    if not customer_id:
-        try:
-            if "google_ads" in st.secrets and st.secrets["google_ads"].get("customer_id"):
-                customer_id = str(st.secrets["google_ads"]["customer_id"])
-        except Exception:
-            customer_id = ""
-
-    if not customer_id:
-        try:
-            st.session_state["google_api_error"] = "GOOGLE_ADS_CUSTOMER_ID(또는 secrets의 customer_id)가 비어 있습니다."
-        except Exception:
-            pass
-        return pd.DataFrame()
-
-    try:
-        st.session_state.pop("google_api_error", None)
-    except Exception:
-        pass
-
-    client = build_google_ads_client()
-    if client is None:
-        try:
-            st.session_state["google_api_error"] = "Google Ads 설정이 누락됐습니다. (developer_token/client_id/client_secret/refresh_token 확인)"
-        except Exception:
-            pass
-        return pd.DataFrame()
-
-    try:
-        rows = fetch_google_ads_insights(
-            client=client,
-            customer_id=customer_id,
-            since=since,
-            until=until,
-        )
-    except Exception as e:
-        try:
-            st.session_state["google_api_error"] = str(e)
-        except Exception:
-            pass
-        return pd.DataFrame()
-
-    if not rows:
-        msg = None
-        try:
-            info = check_google_ads_customer(client=client, customer_id=customer_id)
-            msg = (
-                "Google Ads API는 연결됐지만 결과가 0건입니다. "
-                f"(customer_id={info.get('customer_id')}, "
-                f"name={info.get('name')}, "
-                f"time_zone={info.get('time_zone')}, "
-                f"date_range={since}~{until}) "
-                "MCC 계정이면 하위 광고주(customer_id)를 사용해야 합니다."
-            )
-        except Exception as e:
-            msg = str(e)
-
-        try:
-            accessible = list_accessible_customers(client)
-            if accessible:
-                show = ", ".join(accessible[:8])
-                msg = (msg or "") + f" 접근 가능한 계정 예시: {show}"
-        except Exception:
-            pass
-
-        try:
-            st.session_state["google_api_error"] = msg or "Google Ads API 결과가 0건입니다."
-        except Exception:
-            pass
-        return pd.DataFrame()
-    if not rows:
-        return pd.DataFrame()
-
-    df = pd.DataFrame(rows)
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    return df
-
-
 def diagnose_meta_no_data() -> str:
     """
     Meta 데이터가 0건일 때 원인 진단. (원본 _diagnose_meta_no_data를 모듈로 이동)
@@ -345,57 +236,21 @@ def diagnose_meta_no_data() -> str:
 @st.cache_data(ttl=600)
 def load_main_data():
     load_dotenv(_env_path)
-    dfs = []
-
-    rename_map = {
-        '일': 'Date', '날짜': 'Date', 'Date': 'Date',
-        '캠페인 이름': 'Campaign', '캠페인': 'Campaign', 'Campaign': 'Campaign',
-        '광고 세트 이름': 'AdGroup', '광고 그룹 이름': 'AdGroup', 'AdGroup': 'AdGroup',
-        '광고 이름': 'Creative_ID', '소재 이름': 'Creative_ID', 'Creative_ID': 'Creative_ID',
-        '지출 금액 (KRW)': 'Cost', '비용': 'Cost', 'Cost': 'Cost',
-        '노출': 'Impressions', 'Impressions': 'Impressions',
-        '링크 클릭': 'Clicks', 'Clicks': 'Clicks',
-        '구매': 'Conversions', 'Conversions': 'Conversions',
-        '구매 전환값': 'Conversion_Value', 'Conversion_Value': 'Conversion_Value',
-        '상태': 'Status', 'Status': 'Status',
-        'Gender': 'Gender', 'Age': 'Age'
-    }
-
-    # Meta/Google: API에서 로드 (초기엔 14일만)
     meta_fetched_at = None
-    google_fetched_at = None
     today = datetime.now().date()
     base_since = (today - timedelta(days=14)).isoformat()
     base_until = today.isoformat()
     try:
         df_meta = load_meta_from_api(since=base_since, until=base_until)
-        if not df_meta.empty:
-            dfs.append(df_meta)
-            meta_fetched_at = datetime.now(ZoneInfo("Asia/Seoul"))
+        if df_meta.empty:
+            return pd.DataFrame(), None, None
+        meta_fetched_at = datetime.now(ZoneInfo("Asia/Seoul"))
     except Exception:
-        pass
-
-    # Google: API에서만 로드
-    try:
-        df_google_api = load_google_from_api(since=base_since, until=base_until)
-        if not df_google_api.empty:
-            dfs.append(df_google_api)
-            google_fetched_at = datetime.now(ZoneInfo("Asia/Seoul"))
-    except Exception:
-        pass
-
-    if not dfs:
         return pd.DataFrame(), None, None
 
-    df = pd.concat(dfs, ignore_index=True)
+    df = df_meta.copy()
     if 'Date' in df.columns:
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-
-    # Google 소재명이 비어있는 경우: AdGroup 기반으로 채움 (소재 단위 분리용)
-    if "Platform" in df.columns and "Creative_ID" in df.columns and "AdGroup" in df.columns:
-        google_mask = df["Platform"] == "Google"
-        empty_creative = df["Creative_ID"].isna() | (df["Creative_ID"].astype(str).str.strip() == "")
-        df.loc[google_mask & empty_creative, "Creative_ID"] = df.loc[google_mask & empty_creative, "AdGroup"]
 
     num_cols = ['Cost', 'Impressions', 'Clicks', 'Conversions', 'Conversion_Value']
     for col in num_cols:
@@ -412,39 +267,5 @@ def load_main_data():
     df['Age'] = df['Age'].fillna('Unknown')
     df['Gender'] = df['Gender'].replace({'male': '남성', 'female': '여성', 'Male': '남성', 'Female': '여성'})
 
-    return df, meta_fetched_at, google_fetched_at
+    return df, meta_fetched_at, None
 
-
-@st.cache_data(ttl=600)
-def load_google_demo_data():
-    try:
-        df = pd.read_csv(convert_google_sheet_url(GOOGLE_DEMO_SHEET_URL))
-        df.columns = df.columns.str.strip()
-
-        rename_map = {
-            'Date': 'Date', 'Campaign': 'Campaign', 'AdGroup': 'AdGroup',
-            'Gender': 'Gender', 'Age': 'Age', 'Cost': 'Cost',
-            'Impressions': 'Impressions', 'Clicks': 'Clicks',
-            'Conversions': 'Conversions', 'Conversion_Value': 'Conversion_Value',
-            'Status': 'Status'
-        }
-        df = df.rename(columns=rename_map)
-
-        if 'Date' in df.columns:
-            df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-
-        for col in ['Cost', 'Conversions', 'Impressions', 'Clicks', 'Conversion_Value']:
-            if col in df.columns:
-                if df[col].dtype == 'object':
-                    df[col] = df[col].astype(str).str.replace(',', '').replace('nan', '0')
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-
-        if 'Gender' not in df.columns:
-            df['Gender'] = 'Unknown'
-        if 'Age' not in df.columns:
-            df['Age'] = 'Unknown'
-        df['Gender'] = df['Gender'].replace({'male': '남성', 'female': '여성', 'Male': '남성', 'Female': '여성'})
-
-        return df
-    except Exception:
-        return pd.DataFrame()
