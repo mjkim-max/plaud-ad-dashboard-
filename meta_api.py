@@ -15,11 +15,43 @@ def get_access_token() -> Optional[str]:
     return os.getenv("ACCESS_TOKEN")
 
 
+def _raise_meta_api_error(resp: requests.Response) -> None:
+    """
+    requests 기본 HTTPError는 Meta 응답 본문을 버려서 원인 파악이 어렵다.
+    가능한 경우 Meta error payload를 포함한 RuntimeError로 바꿔 올린다.
+    """
+    try:
+        body = resp.json()
+    except Exception:
+        resp.raise_for_status()
+        return
+
+    err = body.get("error") if isinstance(body, dict) else None
+    if resp.ok and not err:
+        return
+
+    if isinstance(err, dict):
+        parts = [f"Meta API error {resp.status_code}"]
+        if err.get("type"):
+            parts.append(str(err["type"]))
+        if err.get("code") is not None:
+            parts.append(f"code={err['code']}")
+        if err.get("error_subcode") is not None:
+            parts.append(f"subcode={err['error_subcode']}")
+        message = str(err.get("message") or "").strip()
+        if message:
+            parts.append(message)
+        raise RuntimeError(" | ".join(parts))
+
+    resp.raise_for_status()
+
+
 def fetch_insights(
     ad_account_id: str,
     since: str,
     until: str,
     *,
+    token: Optional[str] = None,
     level: str = "ad",
     use_breakdowns: bool = True,
     api_version: str = "v23.0",
@@ -41,7 +73,7 @@ def fetch_insights(
     Returns:
         insights 레코드 리스트 (date_start, campaign_name, adset_name, ad_name, impressions, clicks, spend, actions 등)
     """
-    token = get_access_token()
+    token = token or get_access_token()
     if not token:
         return []
 
@@ -72,7 +104,7 @@ def fetch_insights(
             resp = requests.get(url, params=params, timeout=25)
         else:
             resp = requests.get(url, timeout=25)
-        resp.raise_for_status()
+        _raise_meta_api_error(resp)
         body = resp.json()
 
         if "data" in body and body["data"]:
@@ -110,7 +142,7 @@ def fetch_ad_effective_statuses(
         for ad_id in chunk:
             params = {"access_token": token, "fields": "effective_status"}
             resp = requests.get(f"{base_url}/{ad_id}", params=params, timeout=25)
-            resp.raise_for_status()
+            _raise_meta_api_error(resp)
             data = resp.json()
             if "effective_status" in data:
                 out[str(ad_id)] = str(data["effective_status"])
@@ -243,7 +275,7 @@ def fetch_ad_video_assets(
             "fields": fields,
         }
         resp = requests.get(f"{base_url}/", params=params, timeout=25)
-        resp.raise_for_status()
+        _raise_meta_api_error(resp)
         body = resp.json()
 
         for ad_id in chunk:
@@ -303,6 +335,6 @@ def fetch_video_source_url(
     base_url = f"https://graph.facebook.com/{api_version}"
     params = {"access_token": token, "fields": "source,permalink_url"}
     resp = requests.get(f"{base_url}/{vid}", params=params, timeout=25)
-    resp.raise_for_status()
+    _raise_meta_api_error(resp)
     body = resp.json()
     return str(body.get("source") or body.get("permalink_url") or f"https://www.facebook.com/watch/?v={vid}")

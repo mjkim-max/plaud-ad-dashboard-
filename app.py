@@ -15,6 +15,7 @@ import traceback
 try:
     from services.data_loader import (
         META_AD_ACCOUNT_ID,
+        get_meta_token,
         load_main_data,
         load_meta_from_api,
         load_google_from_api,
@@ -298,7 +299,7 @@ def _fetch_meta_video_assets_cached(ad_ids: tuple) -> dict:
     except Exception:
         return {}
     try:
-        return fetch_ad_video_assets(list(ad_ids))
+        return fetch_ad_video_assets(list(ad_ids), token=get_meta_token())
     except Exception:
         return {}
 
@@ -328,6 +329,7 @@ def _load_meta_long_range_cached(days: int, refresh_key: int) -> pd.DataFrame:
                 META_AD_ACCOUNT_ID,
                 since=cursor.isoformat(),
                 until=chunk_end.isoformat(),
+                token=get_meta_token(),
                 level="ad",
                 use_breakdowns=False,
                 max_pages=200,

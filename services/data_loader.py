@@ -44,9 +44,6 @@ GOOGLE_DEMO_SHEET_URL = "https://docs.google.com/spreadsheets/d/17z8PyqTdVFyF4Qu
 
 # Meta 광고계정 ID (환경변수 우선)
 def _get_meta_token() -> str:
-    token = os.getenv("ACCESS_TOKEN")
-    if token:
-        return token
     try:
         if "ACCESS_TOKEN" in st.secrets:
             return str(st.secrets["ACCESS_TOKEN"])
@@ -55,14 +52,14 @@ def _get_meta_token() -> str:
                 return str(st.secrets[section]["ACCESS_TOKEN"])
     except Exception:
         pass
+    token = os.getenv("ACCESS_TOKEN")
+    if token:
+        return token
     return ""
 
 
 def get_meta_token_info() -> dict:
     """Return non-sensitive token info for debugging."""
-    token = os.getenv("ACCESS_TOKEN")
-    if token:
-        return {"source": "env", "length": len(token), "keys": [], "error": ""}
     try:
         if "ACCESS_TOKEN" in st.secrets:
             t = str(st.secrets["ACCESS_TOKEN"])
@@ -72,20 +69,31 @@ def get_meta_token_info() -> dict:
                 t = str(st.secrets[section]["ACCESS_TOKEN"])
                 return {"source": f"secrets:{section}", "length": len(t), "keys": list(st.secrets.keys()), "error": ""}
     except Exception:
+        token = os.getenv("ACCESS_TOKEN")
+        if token:
+            return {"source": "env", "length": len(token), "keys": [], "error": "st.secrets 접근 실패"}
         return {"source": "missing", "length": 0, "keys": [], "error": "st.secrets 접근 실패"}
+    token = os.getenv("ACCESS_TOKEN")
+    if token:
+        return {"source": "env", "length": len(token), "keys": list(st.secrets.keys()), "error": ""}
     return {"source": "missing", "length": 0, "keys": list(st.secrets.keys()), "error": ""}
 
 
 def _get_meta_ad_account_id() -> str:
-    acc = os.getenv("META_AD_ACCOUNT_ID")
-    if acc:
-        return acc
     try:
         if "META_AD_ACCOUNT_ID" in st.secrets:
             return str(st.secrets["META_AD_ACCOUNT_ID"])
     except Exception:
         pass
+    acc = os.getenv("META_AD_ACCOUNT_ID")
+    if acc:
+        return acc
     return "732978580670026"
+
+
+def get_meta_token() -> str:
+    """Public accessor so every Meta call path can use the same resolved token source."""
+    return _get_meta_token()
 
 
 # Meta 광고계정 ID (환경변수/Secrets 우선)
@@ -130,12 +138,12 @@ def load_meta_from_api(since: str, until: str):
     use_breakdowns = True
     try:
         raw = fetch_insights(
-            META_AD_ACCOUNT_ID, since=since, until=until, level="ad", use_breakdowns=True
+            META_AD_ACCOUNT_ID, since=since, until=until, token=token, level="ad", use_breakdowns=True
         )
     except Exception:
         try:
             raw = fetch_insights(
-                META_AD_ACCOUNT_ID, since=since, until=until, level="ad", use_breakdowns=False
+                META_AD_ACCOUNT_ID, since=since, until=until, token=token, level="ad", use_breakdowns=False
             )
             use_breakdowns = False
         except Exception as e:
@@ -310,7 +318,7 @@ def diagnose_meta_no_data() -> str:
     until = today.isoformat()
     try:
         raw = fetch_insights(
-            META_AD_ACCOUNT_ID, since=since, until=until, level="ad", use_breakdowns=False
+            META_AD_ACCOUNT_ID, since=since, until=until, token=token, level="ad", use_breakdowns=False
         )
     except Exception as e:
         err = _redact(str(e).strip())
