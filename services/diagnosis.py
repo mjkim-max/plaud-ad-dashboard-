@@ -1,7 +1,9 @@
-from datetime import datetime, timedelta, date
+from datetime import timedelta, date
 
 import numpy as np
 import pandas as pd
+
+from services.time_utils import kst_today
 
 
 def get_stats_for_period(df, days, end_date=None):
@@ -9,7 +11,7 @@ def get_stats_for_period(df, days, end_date=None):
     기간별 집계. end_date 미지정 시 전일(어제) 기준으로 기간 계산 (당일 제외).
     end_date 지정 시 해당일 포함 과거 days일. (오늘만 보려면 days=1, end_date=today)
     """
-    today = datetime.now().date()
+    today = kst_today()
     if end_date is None:
         end_date = today - timedelta(days=1)  # 전일 기준 (당일 제외)
     if hasattr(end_date, 'date') and not isinstance(end_date, date):
@@ -34,7 +36,7 @@ def run_diagnosis(df, target_cpa):
     if df.empty:
         return pd.DataFrame()
 
-    today = datetime.now().date()
+    today = kst_today()
     yesterday = today - timedelta(days=1)
 
     # 오늘(1일) + 전일 기준 3일 / 7일 / 14일 (당일 제외)

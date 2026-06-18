@@ -1,6 +1,5 @@
 import os
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -26,6 +25,7 @@ except Exception:  # optional dependency
             return False
 
 from services.meta_parser import parse_meta_actions, parse_meta_action_values
+from services.time_utils import kst_now, kst_today
 # .env를 프로젝트 루트(app.py 있는 폴더)에서 로드
 _env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(_env_path)
@@ -168,7 +168,7 @@ def load_meta_from_api(since: str, until: str):
 
     # 최근 7일 내 지출 있는 광고만 상태 조회
     try:
-        recent_cutoff = datetime.now().date() - timedelta(days=6)
+        recent_cutoff = kst_today() - timedelta(days=6)
         df_recent = df[(df["Date"].dt.date >= recent_cutoff) & (df["Cost"] > 0)]
         ad_ids = sorted({str(v) for v in df_recent["Ad_ID"].dropna().tolist() if str(v)})
     except Exception:
@@ -204,7 +204,7 @@ def diagnose_meta_no_data() -> str:
     except ImportError:
         return "**meta_api** 모듈을 찾을 수 없습니다. (meta_api.py가 app.py와 같은 폴더에 있는지 확인)"
 
-    today = datetime.now().date()
+    today = kst_today()
     since = (today - timedelta(days=14)).isoformat()
     until = today.isoformat()
     try:
@@ -237,14 +237,14 @@ def diagnose_meta_no_data() -> str:
 def load_main_data():
     load_dotenv(_env_path)
     meta_fetched_at = None
-    today = datetime.now().date()
+    today = kst_today()
     base_since = (today - timedelta(days=14)).isoformat()
     base_until = today.isoformat()
     try:
         df_meta = load_meta_from_api(since=base_since, until=base_until)
         if df_meta.empty:
             return pd.DataFrame(), None, None
-        meta_fetched_at = datetime.now(ZoneInfo("Asia/Seoul"))
+        meta_fetched_at = kst_now()
     except Exception:
         return pd.DataFrame(), None, None
 
@@ -268,4 +268,3 @@ def load_main_data():
     df['Gender'] = df['Gender'].replace({'male': '남성', 'female': '여성', 'Male': '남성', 'Female': '여성'})
 
     return df, meta_fetched_at, None
-

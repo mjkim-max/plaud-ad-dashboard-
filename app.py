@@ -21,6 +21,7 @@ except Exception:
     st.stop()
 from services.diagnosis import run_diagnosis
 from services.action_store import load_actions, upsert_action, delete_action
+from services.time_utils import kst_now, kst_today
 
 # -----------------------------------------------------------------------------
 # [SETUP] 페이지 설정
@@ -155,7 +156,7 @@ if st.session_state["data_cache"].get("df_raw") is None:
     df_raw = _annotate_effective_delivery_status(df_raw)
     st.session_state["data_cache"]["df_raw"] = df_raw
     st.session_state["data_cache"]["meta_fetched_at"] = meta_fetched_at
-    st.session_state["data_loaded_at"] = datetime.now()
+    st.session_state["data_loaded_at"] = kst_now()
 else:
     df_raw = st.session_state["data_cache"]["df_raw"]
     if not df_raw.empty and "Effective_Is_On" not in df_raw.columns:
@@ -201,7 +202,7 @@ def render_existing_dashboard() -> None:
     else:
         status_txt = f"Meta {meta_row_count:,}건 로드"
         if meta_fetched_at:
-            status_txt += f" | 반영시점 {meta_fetched_at.strftime('%Y-%m-%d %H:%M:%S')}"
+            status_txt += f" | 반영시점 {meta_fetched_at.strftime('%Y-%m-%d %H:%M:%S')} KST"
         st.caption(status_txt)
 
     st.subheader("1. 캠페인 성과 진단")
@@ -214,7 +215,7 @@ def render_existing_dashboard() -> None:
         st.error(f"조치 시트 연결 오류: {sheet_err}")
     report_cols = st.columns([2, 1, 6])
     with report_cols[0]:
-        report_date = st.date_input("날짜 선택", datetime.now().date(), key="action_report_date")
+        report_date = st.date_input("날짜 선택", kst_today(), key="action_report_date")
     with report_cols[1]:
         run_report = st.button("출력", key="action_report_btn")
     
@@ -252,7 +253,7 @@ def render_existing_dashboard() -> None:
     st.markdown("<div class='sec-divider'></div>", unsafe_allow_html=True)
     
     # 진단 기간: 오늘 포함 최근 15일 (오늘 + 전일기준 14일 모두 포함)
-    _today_ts = pd.Timestamp(datetime.now().date())
+    _today_ts = pd.Timestamp(kst_today())
     if not df_raw.empty and "Date" in df_raw.columns:
         diag_base = df_raw[(df_raw["Date"].notna()) & (df_raw["Date"] >= (_today_ts - timedelta(days=14)))]
     else:
@@ -289,7 +290,7 @@ def render_existing_dashboard() -> None:
         def _calc_period_stats(df_camp: pd.DataFrame, days: int, include_today: bool = False):
             if df_camp.empty or "Date" not in df_camp.columns:
                 return 0.0, 0.0, 0.0
-            end_d = datetime.now().date()
+            end_d = kst_today()
             if not include_today:
                 end_d = end_d - timedelta(days=1)
             start_d = end_d - timedelta(days=days - 1)
@@ -391,7 +392,7 @@ def render_existing_dashboard() -> None:
                     with col3: st.markdown(format_stat_block("14일", r['CPA_14'], r['Cost_14'], r['Conversions_14'], t_color), unsafe_allow_html=True)
     
                     # 소재별 타임라인/입력/진단 (최근 14일)
-                    today = datetime.now().date()
+                    today = kst_today()
                     start = today - timedelta(days=13)
                     dates = [start + timedelta(days=i) for i in range(14)]
                     cid = creative_key

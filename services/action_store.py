@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -16,6 +15,8 @@ try:
     from google.oauth2.service_account import Credentials
 except Exception:
     Credentials = None
+
+from services.time_utils import kst_now
 
 
 _COLUMNS = [
@@ -134,7 +135,7 @@ def upsert_action(
         _ensure_sheet_header(ws)
         df = _sheet_to_df(ws)
         mask = (df["action_date"] == action_date) & (df["creative_key"] == creative_key)
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = kst_now().strftime("%Y-%m-%d %H:%M:%S")
         if mask.any():
             idx = df[mask].index[0]
             row_idx = idx + 2  # 1-based + header
@@ -166,7 +167,7 @@ def upsert_action(
 
     df = load_actions()
     mask = (df["action_date"] == action_date) & (df["creative_key"] == creative_key)
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = kst_now().strftime("%Y-%m-%d %H:%M:%S")
     if mask.any():
         df.loc[mask, ["creative_id", "campaign", "adgroup", "action", "note", "author", "updated_at"]] = [
             creative_id,
