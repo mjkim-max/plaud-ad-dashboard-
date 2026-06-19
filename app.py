@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -11,6 +12,7 @@ import traceback
 
 try:
     from services.data_loader import (
+        META_AD_ACCOUNT_ID,
         get_meta_token,
         load_main_data,
         diagnose_meta_no_data,
@@ -143,6 +145,70 @@ def _fetch_meta_video_assets_cached(ad_ids: tuple) -> dict:
         return fetch_ad_video_assets(list(ad_ids), token=get_meta_token())
     except Exception:
         return {}
+
+
+@st.cache_data(ttl=300)
+def _fetch_meta_action_type_rows(campaign_query: str, since: str, until: str) -> pd.DataFrame:
+    query = str(campaign_query or "").strip()
+    if not query:
+        return pd.DataFrame()
+
+    try:
+        from meta_api import fetch_insights
+    except Exception:
+        return pd.DataFrame()
+
+    token = get_meta_token()
+    if not token:
+        return pd.DataFrame()
+
+    raw = fetch_insights(
+        META_AD_ACCOUNT_ID,
+        since=since,
+        until=until,
+        token=token,
+        level="ad",
+        use_breakdowns=False,
+    )
+
+    rows = []
+    for item in raw:
+        campaign_name = str(item.get("campaign_name") or "")
+        if query not in campaign_name:
+            continue
+
+        actions = item.get("actions") or []
+        if isinstance(actions, str):
+            try:
+                actions = json.loads(actions)
+            except Exception:
+                actions = []
+
+        if not isinstance(actions, list):
+            actions = []
+
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+            rows.append(
+                {
+                    "date_start": item.get("date_start") or "",
+                    "campaign_name": campaign_name,
+                    "adset_name": item.get("adset_name") or "",
+                    "ad_name": item.get("ad_name") or "",
+                    "ad_id": item.get("ad_id") or "",
+                    "action_type": str(action.get("action_type") or ""),
+                    "value": pd.to_numeric(action.get("value"), errors="coerce"),
+                }
+            )
+
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows)
+    df["value"] = pd.to_numeric(df["value"], errors="coerce").fillna(0.0)
+    df["date_start"] = pd.to_datetime(df["date_start"], errors="coerce")
+    return df
 # -----------------------------------------------------------------------------
 # 3. 사이드바 & 데이터 준비
 # -----------------------------------------------------------------------------
@@ -611,6 +677,48 @@ def render_existing_dashboard() -> None:
                             st.session_state['chart_target_campaign'] = r['Campaign']
                             st.rerun()
                         st.markdown("</div>", unsafe_allow_html=True)
+
+                st.markdown("<div class='sec-divider'></div>", unsafe_allow_html=True)
+                st.markdown("##### Meta action_type 리스트")
+                action_since = (kst_today() - timedelta(days=14)).isoformat()
+                action_until = kst_today().isoformat()
+                st.caption(f"조회 기간: {action_since} ~ {action_until}")
+
+                try:
+                    action_df = _fetch_meta_action_type_rows(item["name"], action_since, action_until)
+                    if not action_df.empty:
+                        action_df = action_df[action_df["campaign_name"] == item["name"]].copy()
+
+                    if action_df.empty:
+                        st.info("이 캠페인에 대한 action_type 데이터가 없습니다.")
+                    else:
+                        summary_df = (
+                            action_df.groupby("action_type", dropna=False)["value"]
+                            .sum()
+                            .reset_index()
+                            .sort_values("value", ascending=False)
+                        )
+                        st.markdown("**합계**")
+                        st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+                        daily_df = (
+                            action_df.groupby(["date_start", "action_type"], dropna=False)["value"]
+                            .sum()
+                            .reset_index()
+                            .sort_values(["date_start", "value"], ascending=[True, False])
+                        )
+                        daily_df["date_start"] = daily_df["date_start"].dt.strftime("%Y-%m-%d")
+                        st.markdown("**일자별**")
+                        st.dataframe(daily_df, use_container_width=True, hide_index=True)
+
+                        raw_df = action_df.sort_values(
+                            ["date_start", "ad_name", "action_type"], ascending=[True, True, True]
+                        ).copy()
+                        raw_df["date_start"] = raw_df["date_start"].dt.strftime("%Y-%m-%d")
+                        st.markdown("**원본 리스트**")
+                        st.dataframe(raw_df, use_container_width=True, hide_index=True)
+                except Exception as e:
+                    st.error(f"action_type 조회 실패: {e}")
     
                 st.markdown("<div class='sec-divider'></div>", unsafe_allow_html=True)
     else:
