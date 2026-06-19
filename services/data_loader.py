@@ -88,57 +88,16 @@ def get_meta_token() -> str:
 META_AD_ACCOUNT_ID = _get_meta_ad_account_id()
 
 
-@st.cache_data(ttl=600)
-def load_meta_from_api(since: str, until: str):
-    """
-    Meta Marketing API로 인사이트 조회 후 앱 형식 DataFrame 반환.
-    since/until: YYYY-MM-DD. 캐시 10분.
-    breakdowns 실패 시 자동으로 breakdown 없이 재시도.
-    """
-    token = _get_meta_token()
-    if not token:
-        return pd.DataFrame()
-
+def _num(v):
+    if v is None or v == "":
+        return 0.0
     try:
-        from meta_api import fetch_insights
-    except ImportError:
-        return pd.DataFrame()
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
 
-    try:
-        from meta_api import fetch_ad_effective_statuses
-    except Exception:
-        fetch_ad_effective_statuses = None
 
-    raw = []
-    use_breakdowns = True
-    try:
-        raw = fetch_insights(
-            META_AD_ACCOUNT_ID, since=since, until=until, token=token, level="ad", use_breakdowns=True
-        )
-    except Exception:
-        try:
-            raw = fetch_insights(
-                META_AD_ACCOUNT_ID, since=since, until=until, token=token, level="ad", use_breakdowns=False
-            )
-            use_breakdowns = False
-        except Exception as e:
-            try:
-                st.session_state["meta_api_error"] = str(e)[:300]
-            except Exception:
-                pass
-            return pd.DataFrame()
-
-    if not raw:
-        return pd.DataFrame()
-
-    def _num(v):
-        if v is None or v == "":
-            return 0.0
-        try:
-            return float(v)
-        except (TypeError, ValueError):
-            return 0.0
-
+def _build_meta_df(raw: list[dict], since: str, *, use_breakdowns: bool) -> pd.DataFrame:
     rows = []
     for r in raw:
         date_start = r.get("date_start") or since
@@ -164,23 +123,102 @@ def load_meta_from_api(since: str, until: str):
         })
 
     df = pd.DataFrame(rows)
+    if df.empty:
+        return df
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    return df
+
+
+def _finalize_meta_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    num_cols = ['Cost', 'Impressions', 'Clicks', 'Conversions', 'Conversion_Value']
+    for col in num_cols:
+        if col in df.columns:
+            if df[col].dtype == 'object':
+                df[col] = df[col].astype(str).str.replace(',', '').replace('nan', '0')
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
+    if 'Gender' not in df.columns:
+        df['Gender'] = 'Unknown'
+    if 'Age' not in df.columns:
+        df['Age'] = 'Unknown'
+    df['Gender'] = df['Gender'].fillna('Unknown')
+    df['Age'] = df['Age'].fillna('Unknown')
+    df['Gender'] = df['Gender'].replace({'male': '남성', 'female': '여성', 'Male': '남성', 'Female': '여성'})
+    return df
+
+
+@st.cache_data(ttl=600)
+def load_meta_from_api(since: str, until: str, use_breakdowns: bool = False):
+    """
+    Meta Marketing API로 인사이트 조회 후 앱 형식 DataFrame 반환.
+    since/until: YYYY-MM-DD. 캐시 10분.
+    breakdowns 실패 시 자동으로 breakdown 없이 재시도.
+    """
+    token = _get_meta_token()
+    if not token:
+        return pd.DataFrame()
+
+    try:
+        from meta_api import fetch_insights
+    except ImportError:
+        return pd.DataFrame()
+
+    try:
+        from meta_api import fetch_ad_effective_statuses
+    except Exception:
+        fetch_ad_effective_statuses = None
+
+    raw = []
+    try:
+        raw = fetch_insights(
+            META_AD_ACCOUNT_ID,
+            since=since,
+            until=until,
+            token=token,
+            level="ad",
+            use_breakdowns=use_breakdowns,
+        )
+    except Exception:
+        if use_breakdowns:
+            return pd.DataFrame()
+        try:
+            raw = fetch_insights(
+                META_AD_ACCOUNT_ID, since=since, until=until, token=token, level="ad", use_breakdowns=False
+            )
+        except Exception as e:
+            try:
+                st.session_state["meta_api_error"] = str(e)[:300]
+            except Exception:
+                pass
+            return pd.DataFrame()
+
+    if not raw:
+        return pd.DataFrame()
+
+    df = _build_meta_df(raw, since, use_breakdowns=use_breakdowns)
+    if df.empty:
+        return df
 
     # 최근 7일 내 지출 있는 광고만 상태 조회
-    try:
-        recent_cutoff = kst_today() - timedelta(days=6)
-        df_recent = df[(df["Date"].dt.date >= recent_cutoff) & (df["Cost"] > 0)]
-        ad_ids = sorted({str(v) for v in df_recent["Ad_ID"].dropna().tolist() if str(v)})
-    except Exception:
-        ad_ids = []
-
-    if fetch_ad_effective_statuses and ad_ids:
+    if not use_breakdowns:
         try:
-            status_map = fetch_ad_effective_statuses(META_AD_ACCOUNT_ID, ad_ids, token=token)
-            df["Status"] = df["Ad_ID"].map(status_map).fillna("Unknown")
+            recent_cutoff = kst_today() - timedelta(days=6)
+            df_recent = df[(df["Date"].dt.date >= recent_cutoff) & (df["Cost"] > 0)]
+            ad_ids = sorted({str(v) for v in df_recent["Ad_ID"].dropna().tolist() if str(v)})
         except Exception:
-            pass
-    return df
+            ad_ids = []
+
+        if fetch_ad_effective_statuses and ad_ids:
+            try:
+                status_map = fetch_ad_effective_statuses(META_AD_ACCOUNT_ID, ad_ids, token=token)
+                df["Status"] = df["Ad_ID"].map(status_map).fillna("Unknown")
+            except Exception:
+                pass
+
+    return _finalize_meta_df(df)
 
 
 def diagnose_meta_no_data() -> str:
@@ -241,30 +279,12 @@ def load_main_data():
     base_since = (today - timedelta(days=14)).isoformat()
     base_until = today.isoformat()
     try:
-        df_meta = load_meta_from_api(since=base_since, until=base_until)
+        df_meta = load_meta_from_api(since=base_since, until=base_until, use_breakdowns=False)
         if df_meta.empty:
-            return pd.DataFrame(), None, None
+            return pd.DataFrame(), None, pd.DataFrame()
+        df_meta_demographics = load_meta_from_api(since=base_since, until=base_until, use_breakdowns=True)
         meta_fetched_at = kst_now()
     except Exception:
-        return pd.DataFrame(), None, None
+        return pd.DataFrame(), None, pd.DataFrame()
 
-    df = df_meta.copy()
-    if 'Date' in df.columns:
-        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-
-    num_cols = ['Cost', 'Impressions', 'Clicks', 'Conversions', 'Conversion_Value']
-    for col in num_cols:
-        if col in df.columns:
-            if df[col].dtype == 'object':
-                df[col] = df[col].astype(str).str.replace(',', '').replace('nan', '0')
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-
-    if 'Gender' not in df.columns:
-        df['Gender'] = 'Unknown'
-    if 'Age' not in df.columns:
-        df['Age'] = 'Unknown'
-    df['Gender'] = df['Gender'].fillna('Unknown')
-    df['Age'] = df['Age'].fillna('Unknown')
-    df['Gender'] = df['Gender'].replace({'male': '남성', 'female': '여성', 'Male': '남성', 'Female': '여성'})
-
-    return df, meta_fetched_at, None
+    return df_meta, meta_fetched_at, df_meta_demographics

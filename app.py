@@ -218,9 +218,10 @@ if "data_loaded_at" not in st.session_state:
     st.session_state["data_loaded_at"] = None
 
 if st.session_state["data_cache"].get("df_raw") is None:
-    df_raw, meta_fetched_at, _ = load_main_data()
+    df_raw, meta_fetched_at, df_demographics = load_main_data()
     df_raw = _annotate_effective_delivery_status(df_raw)
     st.session_state["data_cache"]["df_raw"] = df_raw
+    st.session_state["data_cache"]["df_demographics"] = df_demographics
     st.session_state["data_cache"]["meta_fetched_at"] = meta_fetched_at
     st.session_state["data_loaded_at"] = kst_now()
 else:
@@ -228,6 +229,7 @@ else:
     if not df_raw.empty and "Effective_Is_On" not in df_raw.columns:
         df_raw = _annotate_effective_delivery_status(df_raw)
         st.session_state["data_cache"]["df_raw"] = df_raw
+    df_demographics = st.session_state["data_cache"].get("df_demographics", pd.DataFrame())
     meta_fetched_at = st.session_state["data_cache"]["meta_fetched_at"]
 
 # Meta 로드 건수 (필터 적용 전 기준, 진단/표시용)
@@ -735,6 +737,7 @@ def render_existing_dashboard() -> None:
     target_campaign = st.session_state['chart_target_campaign']
     
     trend_df = target_df.copy()
+    demog_source = df_demographics.copy() if isinstance(df_demographics, pd.DataFrame) else pd.DataFrame()
     demog_df = pd.DataFrame()
     is_specific = False
     
@@ -751,7 +754,15 @@ def render_existing_dashboard() -> None:
 
         sel_row = trend_df
         if not sel_row.empty:
-            demog_df = trend_df
+            demog_df = demog_source.copy()
+            if target_creative and 'Creative_ID' in demog_df.columns:
+                demog_df['Creative_ID'] = demog_df['Creative_ID'].astype(str)
+                demog_df = demog_df[demog_df['Creative_ID'] == str(target_creative)]
+            else:
+                if target_adgroup:
+                    demog_df = demog_df[demog_df['AdGroup'] == target_adgroup]
+                if target_campaign:
+                    demog_df = demog_df[demog_df['Campaign'] == target_campaign]
             st.info(f"🔎 현재 **'{target_creative}'** 소재를 집중 분석 중입니다.")
 
         is_specific = True
@@ -778,7 +789,7 @@ def render_existing_dashboard() -> None:
             st.session_state['chart_target_campaign'] = None
             st.rerun()
     else:
-        demog_df = target_df.copy()
+        demog_df = demog_source.copy()
         st.info("📊 통합 추세 분석 중 (특정 소재를 보려면 위에서 '분석하기'를 누르세요)")
     
     c_freq, c_opts, c_norm = st.columns([1, 2, 1])
