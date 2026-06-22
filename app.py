@@ -283,6 +283,14 @@ def render_existing_dashboard() -> None:
                 merge_cols.append("Effective_Status")
             diag_res = diag_res.merge(status_latest[merge_cols], on=["Campaign", "AdGroup", "Creative_ID"], how="left")
 
+        if "Effective_Is_On" in diag_res.columns:
+            active_campaigns = (
+                diag_res.groupby("Campaign")["Effective_Is_On"]
+                .apply(lambda s: s.fillna(False).astype(bool).any())
+            )
+            active_campaign_names = set(active_campaigns[active_campaigns].index.tolist())
+            diag_res = diag_res[diag_res["Campaign"].isin(active_campaign_names)].copy()
+
         def _is_active_status(v: str) -> bool:
             return str(v).upper() in {"ACTIVE", "ON", "ENABLED"}
 
